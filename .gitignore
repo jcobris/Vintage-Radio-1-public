@@ -1,0 +1,22 @@
+# Arduino build artifacts
+*.ino~
+*.bak
+*.tmp
+*.swp
+*.d
+*.o
+*.a
+*.elf
+*.hex
+*.bin
+
+# Arduino IDE / local clutter
+.DS_Store
+Thumbs.db
+
+# If you copied Arduino libraries into the repo, ignore them:
+libraries/
+Arduino/libraries/
+
+# Optional: ignore datasheets if you prefer not to store PDFs in git
+# docs/datasheets/
