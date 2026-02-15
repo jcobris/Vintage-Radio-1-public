@@ -1,7 +1,7 @@
-We’re continuing my Vintage Radio Retrofit project. Work one step at a time.
+We’re continuing my Vintage Radio project. Work one step at a time.
 
-Repo: <paste GitHub repo URL here>
-Please read these files in the repo first:
+Public mirror repo: https://github.com/jcobris/Vintage-Radio-1-public
+Please read:
 - ASSISTANT_START_HERE.md
 - PROJECT_STATE.md
 - docs/REQUIREMENTS.md
@@ -9,4 +9,5 @@ Please read these files in the repo first:
 - docs/PINOUT.md
 - docs/README.md
 
-Goal: Help me merge my working test sketches into a modular final Arduino sketch (Nano first, ESP32 fallback only if needed). Start by creating/confirming a clean final sketch skeleton that compiles.
+Current sketch: sketch/Radio_Main.ino
+Today’s goal: <describe what you want to do next>
