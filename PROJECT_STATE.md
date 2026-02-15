@@ -1,60 +1,111 @@
 # Project State — Vintage Radio Retrofit
 
-## Current Goal
-Combine proven test sketches into one final Arduino Nano project (ESP32 fallback only if required).
+**Owner:** Jeff Cornwell  
+**Working style:** One step at a time (no big-bang merges)
 
-## Target / Tools
-- IDE: Arduino IDE
-- Board: Arduino Nano (ATmega328P)
+---
+
+## Repositories (IMPORTANT)
+
+### Source of Truth (Private)
+- **Private repo:** `jcobris/Vintage-Radio-1`
+- This is the authoritative repo where development happens.
+
+### Public Mirror (Reference for AI / Sharing)
+- **Public repo:** https://github.com/jcobris/Vintage-Radio-1-public
+- This is a mirrored copy that updates automatically from the private repo.
+- Use this public repo link in future conversations so the assistant can browse files directly.
+
+### Mirror Automation
+- Mirroring is performed by a GitHub Actions workflow in the **private** repo:
+  - `.github/workflows/mirror-to-public.yml`
+- The workflow pushes all branches/tags to the public repo.
+- It uses a repo secret in the private repo:
+  - Secret name: `MIRROR_PAT` (classic PAT with `workflow` + repo write capability)
+- Note: The public mirror contains workflows too (by design).
+
+---
+
+## Current Build Target
+- **IDE:** Arduino IDE
+- **Primary board:** Arduino Nano (ATmega328P)
+- **Fallback:** ESP32 if Nano resources become insufficient
+
+---
 
 ## Hardware Summary (Verified)
-- MP3 module: DY-SV5W @ 9600 baud
+
+### Audio / Source Sense
+- Audio source selection is **physical** (2-pole switch routes audio to preamp).
+- Firmware only *detects* which source is selected for display logic:
+  - **D2 LOW = MP3 selected**
+  - **D2 HIGH = Bluetooth selected**
+
+### Modules (UART)
+- **MP3 module:** DY-SV5W @ 9600 baud  
   - SoftwareSerial pins: (12,11)
-- Bluetooth module: BT210
+- **Bluetooth module:** BT210  
   - SoftwareSerial pins: (9,10)
   - Setup-only; retains config on reboot
-  - Emits 2 messages on pause/play; no continuous chatter
-- Matrix: WS2812B 8x32 on D7
-- Dial/tuner light strip: Analog PWM on D6
-- Source sense: D2 (LOW=MP3 selected, HIGH=BT selected)
-- Display switch (3-position): D3 normal themes, D4 reserved, D5 matrix off + tuner light solid on
-- Tuning capacitor timing input: D1 (maps charge time to folder 1–4)
+  - Emits 2 messages on pause/play; no continuous chatter expected/required
 
-## Display/Themes (Normal when D3 active)
-- BT selected: PARTY pattern runs continuously
-- MP3 selected:
+### LEDs
+- **Matrix:** WS2812B 8x32 on **D7**
+- **Dial/Tuner lights:** Analog PWM on **D6**
+
+### Display Mode Switch (3-position)
+- **D3:** Normal themes enabled
+- **D4:** Reserved for future themes (currently no behaviour)
+- **D5:** Matrix OFF, tuner lights solid ON
+
+### Folder Selection Input
+- **D1:** Tuning capacitor timing input -> maps charge time to folder 1–4  
+  - Note: D1 is Nano Serial TX; may interfere with USB Serial debugging/upload.
+
+---
+
+## Behaviour Summary
+
+### Display Priority
+1) If D5 active → Matrix OFF, tuner light solid ON  
+2) Else if D3 active → Normal theme selection  
+3) Else if D4 active → Reserved (no special behaviour yet)
+
+### Themes (Normal when D3 active)
+- **BT selected (D2 HIGH):** PARTY pattern runs continuously
+- **MP3 selected (D2 LOW):**
   - Folder 1: PARTY
   - Folder 2: FIRE
   - Folder 3: CHRISTMAS (red/green half pulsing)
   - Folder 4: EERIE (green/blue slow pulsing + dial PWM synced)
-- Constraint: Matrix uses a single color per 8-LED column
+- Matrix constraint: **single color per 8-LED column**
 
-## MP3 Folder Change Sequence
+### MP3 Folder Change Sequence
 1) Mute volume  
 2) Send next/prev folder until desired folder reached  
-3) Send play-random-in-folder (starts at track 1; blank track 1 in each folder)  
+3) Send random-in-folder (starts at track 1; blank track 1 in each folder)  
 4) Send play  
-5) Set volume max  
+5) Set volume max
 
-## Docs (Source of Truth)
-- docs/REQUIREMENTS.md
-- docs/ARCHITECTURE.md
-- docs/PINOUT.md
-- docs/README.md
+---
 
-## Known Risks / Notes
-- Nano D1 is hardware Serial TX (USB). Using D1 for timing input may affect uploads/debugging.
+## Code Locations (Current)
+
+- **Main Arduino sketch:** `sketch/Radio_Main.ino`  
+- Project docs:
+  - `docs/REQUIREMENTS.md`
+  - `docs/ARCHITECTURE.md`
+  - `docs/PINOUT.md`
+  - `docs/README.md`
+
+---
 
 ## What’s Working Today
-- (Fill in) Link or names of working test sketches under /tests
-- (Fill in) Any known-good parameter values (timing thresholds, volumes, delays)
+- (Fill in) List of verified working test sketches under `/tests` if present
+- (Fill in) Any known-good timing thresholds or constants (to avoid re-calibration)
 
-## Next Steps (Planned)
-1) Create final sketch skeleton + config.h (compiles clean)
-2) Merge subsystems one-by-one:
-   - Inputs (D2 + D3/D4/D5)
-   - Folder selector (use your known-good config)
-   - MP3 controller state machine (non-blocking)
-   - Matrix patterns
-   - Dial PWM + sync for folder 4
-3) Add GitHub Issues for each subsystem and acceptance tests
+---
+
+## Next Planned Work (High Level)
+- Continue using GitHub Issues to track work.
+- When ready: design a “final sketch” structure and merge proven test code incrementally.
