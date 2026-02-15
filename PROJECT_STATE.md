@@ -91,7 +91,7 @@
 
 ## Code Locations (Current)
 
-- **Main Arduino sketch:** `sketch/Radio_Main.ino`  
+- **Main Arduino sketch:** `sketch/sketch/VintageRadio/VintageRadio.ino`  
 - Project docs:
   - `docs/REQUIREMENTS.md`
   - `docs/ARCHITECTURE.md`
