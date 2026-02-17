@@ -1,6 +1,6 @@
 # Vintage Radio Retrofit (Arduino Nano)
 
-Personal project: retrofit a vintage radio with modern playback sources + LED effects.
+Personal project: retrofit a vintage radio with modern playback sources + LED effects
 
 ## Current sketch (open this in Arduino IDE)
 - `sketch/Vintage-Radio-1/Vintage-Radio-1.ino`
