@@ -1,4 +1,5 @@
-#if 0
+
+#include "MP3.h"
 #include <Arduino.h>
 #include <SoftwareSerial.h>
 
@@ -52,6 +53,7 @@ void sendCommand(const byte *cmd, int len) {
     }
     Serial.println();
   }
+  mp3Serial.listen();
   mp3Serial.write(cmd, len);
   delay(20); // DY-SV5W is slow to accept back-to-back frames (9600 8N1)
 }
@@ -197,16 +199,22 @@ void checkMP3Online() {
 
 // ----------------- Arduino lifecycle -----------------
 
-void setup() {
-  Serial.begin(9600);
-  mp3Serial.begin(9600); // DY-SV5W fixed UART parameters: 9600 8N1
+
+void MP3::init() {
+  // DO NOT call Serial.begin() here.
+  // Main .ino owns Serial baud rate (we'll use 115200 globally).
+
+  mp3Serial.begin(9600);   // DY-SV5W fixed UART parameters: 9600 8N1
+  mp3Serial.listen();      // make MP3 the active SoftwareSerial receiver [1](https://stackoverflow.com/questions/39065921/what-do-raw-githubusercontent-com-urls-represent)
+
   if (mp3Debug) Serial.println(F("MP3 Control Ready"));
 
   checkMP3Online();
   initialSetup();
 }
 
-void loop() {
+
+void MP3::tick() {
   // ---------- 1) Read a full line from Serial and send as hex to MP3 ----------
   static String cmdLine;
 
@@ -252,4 +260,3 @@ void loop() {
     }
   }
 }
-#endif
