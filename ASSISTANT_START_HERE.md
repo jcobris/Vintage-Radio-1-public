@@ -20,6 +20,7 @@ https://github.com/jcobris/Vintage-Radio-1-public
 
 ## Working Style
 - One step at a time.
+- Where there are multiple options, provide a brief summary of each, not a full explaination.
 - Avoid big rewrites unless explicitly requested.
 - Arduino Nano first; ESP32 only if necessary due to resources.
 
@@ -31,7 +32,7 @@ https://github.com/jcobris/Vintage-Radio-1-public
 - `docs/README.md`
 
 ## Key Code File
-- Current working sketch: `sketch/Radio_Main.ino`
+- Current working sketch: `sketch/Vintage-Radio-1.ino`
 
 ## Typical Session Goal
 - Help merge and refine functionality safely, incrementally, with clear acceptance checks.
