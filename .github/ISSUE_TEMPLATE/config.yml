@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Project context (read first)
+    url: https://github.com/jcobris/Vintage-Radio-1-public
+    about: Use the public mirror to browse code/docs in chat. Start with ASSISTANT_START_HERE.md and PROJECT_STATE.md.

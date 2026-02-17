@@ -9,5 +9,5 @@ Please read:
 - docs/PINOUT.md
 - docs/README.md
 
-Current sketch: sketch/Radio_Main.ino
+Current sketch: sketch/Vintage-Radio-1.ino
 Today’s goal: <describe what you want to do next>
