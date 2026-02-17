@@ -28,6 +28,11 @@
 #define BT_PASSTHROUGH 0
 #define TUNER_CONNECTED 0
 
+// Debounce for the physical source switch on D2.
+// Prevents rapid MP3<->BT toggles due to contact bounce.
+constexpr uint16_t SOURCE_DEBOUNCE_MS = 50;
+
+// When tuner is not connected, force a default folder so MP3 can still play.
 constexpr uint8_t DEFAULT_FOLDER_WHEN_NO_TUNER = 0;
 
 // Shared state
@@ -44,9 +49,30 @@ static BluetoothModule btModule(Config::PIN_BT_RX, Config::PIN_BT_TX);
 enum class SourceMode : uint8_t { MP3, Bluetooth };
 static SourceMode g_lastMode = SourceMode::Bluetooth;
 
-static SourceMode readSourceMode() {
+// Raw read (no debounce)
+static SourceMode readSourceModeRaw() {
   const bool mp3Selected = (digitalRead(Config::PIN_SOURCE_DETECT) == LOW);
   return mp3Selected ? SourceMode::MP3 : SourceMode::Bluetooth;
+}
+
+// Debounced read
+static SourceMode readSourceModeDebounced(unsigned long nowMs) {
+  static SourceMode lastRaw = SourceMode::Bluetooth;
+  static SourceMode stable = SourceMode::Bluetooth;
+  static unsigned long lastFlipMs = 0;
+
+  SourceMode raw = readSourceModeRaw();
+  if (raw != lastRaw) {
+    lastRaw = raw;
+    lastFlipMs = nowMs;
+  }
+
+  // Only accept a new stable mode if it has been steady for the debounce period
+  if ((nowMs - lastFlipMs) >= SOURCE_DEBOUNCE_MS && stable != lastRaw) {
+    stable = lastRaw;
+  }
+
+  return stable;
 }
 
 void setup() {
@@ -59,6 +85,7 @@ void setup() {
   pinMode(Config::PIN_LED_DISPLAY, OUTPUT);
   DisplayLED::init(Config::PIN_LED_DISPLAY);
 
+  // ---- Bluetooth init (AT config on boot) ----
   btModule.begin(Config::BT_BAUD);
   Serial.println(F("[BOOT] Configuring BT201..."));
   btModule.sendInitialCommands();
@@ -71,10 +98,12 @@ void setup() {
   Serial.println(F("[BOOT] BT201 UART active (passthrough enabled)."));
 #endif
 
+  // ---- MP3 init ----
   MP3::init();
   Serial.println(F("[BOOT] MP3 init done."));
 
-  g_lastMode = readSourceMode();
+  // Capture initial mode (debounced)
+  g_lastMode = readSourceModeDebounced(millis());
   Serial.print(F("[MODE] Initial source: "));
   Serial.println((g_lastMode == SourceMode::MP3) ? F("MP3") : F("Bluetooth"));
 }
@@ -82,7 +111,9 @@ void setup() {
 void loop() {
   const unsigned long now = millis();
 
-  const SourceMode mode = readSourceMode();
+  // Debounced mode read
+  const SourceMode mode = readSourceModeDebounced(now);
+
   if (mode != g_lastMode) {
     g_lastMode = mode;
     Serial.print(F("[MODE] Source changed to: "));
@@ -115,7 +146,7 @@ void loop() {
       analogWrite(Config::PIN_LED_DISPLAY, s_displayBrightness);
     }
 
-    // 3) Push folder to MP3 module + tick MP3 only when selected
+    // 3) MP3 behavior only when MP3 is selected
     MP3::setDesiredFolder(g_currentFolder);
     MP3::tick();
 
