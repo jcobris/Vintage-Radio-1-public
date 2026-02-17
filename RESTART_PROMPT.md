@@ -10,4 +10,4 @@ Please read:
 - docs/README.md
 
 Current sketch: sketch/Vintage-Radio-1.ino
-Today’s goal: Complete setting up github before merging sketch elements into final project.
+Today’s goal: Debug serial communication to MP3 player and Bluetooth

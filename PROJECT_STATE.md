@@ -102,15 +102,17 @@
 
 ## What’s Working Today
 - Vintage-Radio-1.inu has tested code for folder selection using tuning capacitor as well as working matrix display and tuner LED. I'm not sure if the folder variable is currently working with the matrix function. 
-- \tests\BT201\Bluetooth_Module_v1_1\Bluetooth_Module_v1_1 contains working code for serial connection and bluetooth initialisation.
-- \tests\DY_SV5W_Test_v1_6\DY_SV5W_Test_v1_6.ino contains working code for serial connection, initialisation, folder selection and random track play for MP3 player.
+- Bluetooth module code added to main code
+- MP3 code added to main Code
+- D2 pin logic added to detect MP3 or Bluetooth active.
+- There appears to be a conflict with having 2 serial connections. This needs to be investigated
 
 ---
 
 ## Next Planned Work (High Level)
-- Finish setting up github if required
-- Continue using GitHub Issues to track work.
-- When ready: design a “final sketch” structure and merge proven test code incrementally. Bluetooth and MP3 player sketches.
+- Debug serial communication issue
+- Serial Comms on Bluetooth need only happen during initial setup. Should be deactivated unless debugging enabled
+- 
 - Make sure all variables are consitent and can be passed between functions
 - Refine debugging to final state. Make it so it can be turned on or off to minimise serial outputs
 - Remove any obsolete or unused code.
