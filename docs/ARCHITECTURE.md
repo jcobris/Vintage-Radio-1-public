@@ -28,7 +28,7 @@
 **Inputs**
 - D2: Source sense (BT vs MP3)
 - D3/D4/D5: Display mode switch position
-- D1: Capacitor timing measurement -> folder (1–4)
+- D8: Capacitor timing measurement -> folder (1–4)
 
 **Derived state**
 - `sourceMode`:
@@ -84,14 +84,13 @@ When `DISPLAY_NORMAL`:
 
 ### 3.2 FolderSelector (Capacitor Timing)
 **Responsibilities**
-- Measure capacitor charge time via D1 circuit
+- Measure capacitor charge time via D8 circuit
 - Convert measurement into folder 1–4 using threshold constants
 - Expose `folder`
 - Detect folder change events
 
 **Notes / Risks**
-- D1 is Nano hardware serial TX; using D1 may interfere with USB serial debug and upload.
-- If debug becomes unreliable, consider migrating this input to a different pin (e.g., A0) later.
+
 
 **Calibration**
 - Store thresholds in `config.h`:
@@ -224,7 +223,7 @@ VintageRadioFinal/
 ## 7. Configuration (config.h)
 
 Include:
-- Pin assignments (D1, D2, D3/4/5, D6, D7, SoftSerial pins)
+- Pin assignments (D8, D2, D3/4/5, D6, D7, SoftSerial pins)
 - Debounce/stability times
 - Folder timing thresholds (calibrated)
 - Dial brightness values (normal, solid override)

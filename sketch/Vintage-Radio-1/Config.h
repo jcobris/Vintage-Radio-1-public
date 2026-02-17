@@ -18,6 +18,6 @@
 
 namespace Config {
   // --- Pins ---
-  constexpr uint8_t PIN_TUNING_INPUT = 6;    // D6 for RC timing
-  constexpr uint8_t PIN_LED_DISPLAY  = 11;   // D11 to MOSFET/LED string
+  constexpr uint8_t PIN_TUNING_INPUT = 8;    // D8 for RC timing
+  constexpr uint8_t PIN_LED_DISPLAY  = 6;   // D6 to MOSFET/LED string
 }

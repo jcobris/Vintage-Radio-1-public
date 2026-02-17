@@ -30,19 +30,10 @@ Only one position should be active at a time.
 
 ## 2. Tuning / Folder Selection Input
 
-### D1 — Tuning Capacitor Timing Input
+### D8 — Tuning Capacitor Timing Input
 - **Purpose:** Measure capacitor charge time to map to folder 1–4
 - **Signal type:** timing-based digital measurement (details depend on circuit)
 
-⚠️ **Important note (Nano hardware serial conflict):**
-- Arduino Nano **D0/D1 are the hardware Serial (USB) RX/TX pins**.
-- Using **D1** for capacitor timing can interfere with USB Serial debugging and uploading behavior.
-- If you see upload/debug issues, options include:
-  - Move tuning measurement to a different pin (often an analog pin like A0)
-  - Reduce/disable Serial debug in final build
-  - Ensure the timing circuit does not fight the USB serial interface electrically
-
-(Keep as-is for now since your wiring is verified; this is just a documented risk.)
 
 ---
 

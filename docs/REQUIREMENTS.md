@@ -88,7 +88,7 @@ A 3-position switch selects display behavior; pins **D3/D4/D5** indicate which p
 > Implementation detail (not required by this spec, but implied): likely `INPUT_PULLUP` and the active pin reads LOW.
 
 ### 4.3 Folder Selection via Tuning Capacitor Timing
-- **Input pin:** **D1** (timing measurement input as wired)
+- **Input pin:** **D8** (timing measurement input as wired)
 - A function measures how long the tuning capacitor takes to charge.
 - The measured time maps to **MP3 folder number 1–4**.
 
@@ -188,5 +188,4 @@ When the desired folder changes (based on tuning capacitor timing), firmware mus
 - Capacitor timing thresholds for folder mapping (calibration values)
 - Confirm direction of SoftwareSerial wiring (Nano TX/RX to module RX/TX)
 - Dial light PWM brightness level for “solid on” override (D5)
-- Potential pin conflict considerations when using D1 for timing input (see PINOUT notes)
 - Final decision on animation library (FastLED vs Adafruit_NeoPixel)
