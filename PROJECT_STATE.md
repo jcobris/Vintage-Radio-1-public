@@ -91,7 +91,7 @@
 
 ## Code Locations (Current)
 
-- **Main Arduino sketch:** `sketch/sketch/VintageRadio/VintageRadio.ino`  
+- **Main Arduino sketch:** `sketch/Vintage-Radio-1/Vintage-Radio-1.ino`  
 - Project docs:
   - `docs/REQUIREMENTS.md`
   - `docs/ARCHITECTURE.md`
@@ -101,11 +101,16 @@
 ---
 
 ## What’s Working Today
-- (Fill in) List of verified working test sketches under `/tests` if present
-- (Fill in) Any known-good timing thresholds or constants (to avoid re-calibration)
+- Vintage-Radio-1.inu has tested code for folder selection using tuning capacitor as well as working matrix display and tuner LED. I'm not sure if the folder variable is currently working with the matrix function. 
+- \tests\BT201\Bluetooth_Module_v1_1\Bluetooth_Module_v1_1 contains working code for serial connection and bluetooth initialisation.
+- \tests\DY_SV5W_Test_v1_6\DY_SV5W_Test_v1_6.ino contains working code for serial connection, initialisation, folder selection and random track play for MP3 player.
 
 ---
 
 ## Next Planned Work (High Level)
+- Finish setting up github if required
 - Continue using GitHub Issues to track work.
-- When ready: design a “final sketch” structure and merge proven test code incrementally.
+- When ready: design a “final sketch” structure and merge proven test code incrementally. Bluetooth and MP3 player sketches.
+- Make sure all variables are consitent and can be passed between functions
+- Refine debugging to final state. Make it so it can be turned on or off to minimise serial outputs
+- Remove any obsolete or unused code.
