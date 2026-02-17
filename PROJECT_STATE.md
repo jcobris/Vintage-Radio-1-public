@@ -91,7 +91,7 @@
 
 ## Code Locations (Current)
 
-- **Main Arduino sketch:** `sketch/Radio_Main.ino`  
+- **Main Arduino sketch:** `sketch/Vintage-Radio-1.ino`  
 - Project docs:
   - `docs/REQUIREMENTS.md`
   - `docs/ARCHITECTURE.md`
@@ -101,8 +101,8 @@
 ---
 
 ## What’s Working Today
-- (Fill in) List of verified working test sketches under `/tests` if present
-- (Fill in) Any known-good timing thresholds or constants (to avoid re-calibration)
+- In Vintage-Radio-1.ino ,code for selecting folder based on tuner location as well as Matrix and Tuner Display LED
+- Serial communication for Bluetooth and MP3 player as well as initialisation commands and folder selection logic (may require tweaking)
 
 ---
 
