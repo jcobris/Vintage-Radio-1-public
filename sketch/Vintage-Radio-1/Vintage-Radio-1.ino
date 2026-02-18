@@ -55,7 +55,7 @@
 constexpr uint16_t SOURCE_DEBOUNCE_MS = 50;
 
 // When tuner is not connected, force a default folder so MP3 can still play.
-constexpr uint8_t DEFAULT_FOLDER_WHEN_NO_TUNER = 4;
+constexpr uint8_t DEFAULT_FOLDER_WHEN_NO_TUNER = 1;
 
 // Shared state
 static uint8_t g_currentFolder = DEFAULT_FOLDER_WHEN_NO_TUNER;
@@ -78,7 +78,7 @@ static DisplayMode g_lastDisplayMode = DisplayMode::Normal;
 
 // -------- Source detect helpers --------
 static SourceMode readSourceModeRaw() {
-  // LOW = MP3 selected, HIGH = Bluetooth selected (INPUT_PULLUP) [1](https://teamtelstra-my.sharepoint.com/personal/jeff_c_cornwell_team_telstra_com/Documents/Microsoft%20Copilot%20Chat%20Files/LedMatrix.h)
+  // LOW = MP3 selected, HIGH = Bluetooth selected (INPUT_PULLUP)
   const bool mp3Selected = (digitalRead(Config::PIN_SOURCE_DETECT) == LOW);
   return mp3Selected ? SourceMode::MP3 : SourceMode::Bluetooth;
 }

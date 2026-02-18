@@ -3,11 +3,11 @@
 #include "Bluetooth.h"
 
 BluetoothModule::BluetoothModule(uint8_t rxPin, uint8_t txPin)
-  : _rxPin(rxPin),
-    _txPin(txPin),
-    _baud(0),
-    _active(false),
-    btSerial(rxPin, txPin) {
+ : _rxPin(rxPin),
+   _txPin(txPin),
+   _baud(0),
+   _active(false),
+   btSerial(rxPin, txPin) {
 }
 
 void BluetoothModule::begin(long baudRate) {
@@ -27,11 +27,9 @@ void BluetoothModule::wake() {
 
 void BluetoothModule::sleep() {
   if (!_active) return;
-
   // Stop SoftwareSerial to avoid background listening / interrupts
   btSerial.end();
   _active = false;
-
   // Tri-state the pins to reduce accidental driving/noise on shared breadboards
   pinMode(_rxPin, INPUT);
   pinMode(_txPin, INPUT);
@@ -46,26 +44,25 @@ void BluetoothModule::sendInitialCommands() {
   if (!_active) wake();
 
   // NOTE: This assumes the BT201 is already configured to use the baud rate
-  // you've selected (commonly 57600 in your current setup). [2](https://github.com/jcobris/Vintage-Radio-1-public/security)
-  sendCommand("AT+CT04");            // Set baud rate to 57600 (kept per your working setup)
+  // you've selected (commonly 57600 in your current setup).
+  sendCommand("AT+CT04"); // Set baud rate to 57600 (kept per your working setup)
   delay(50);
   sendCommand("AT+BDO'l Timey Radio"); // Set Bluetooth name
   delay(50);
-  sendCommand("AT+CK00");            // Disable auto-switch to Bluetooth
+  sendCommand("AT+CK00"); // Disable auto-switch to Bluetooth
   delay(50);
-  sendCommand("AT+B200");            // Disable Bluetooth call functions
+  sendCommand("AT+B200"); // Disable Bluetooth call functions
   delay(50);
-  sendCommand("AT+CA30");            // Volume 100%
+  sendCommand("AT+CA30"); // Volume 100%
   delay(50);
-  sendCommand("AT+CN00");            // Disable prompt sounds
+  sendCommand("AT+CN00"); // Disable prompt sounds
   delay(50);
-  sendCommand("AT+CQ01");            // EQ Rock
+  sendCommand("AT+CQ01"); // EQ Rock
   delay(50);
 }
 
 void BluetoothModule::sendCommand(const String &cmd) {
   if (!_active) return;
-
   btSerial.listen();
   btSerial.print(cmd);
   btSerial.print("\r\n");
@@ -74,7 +71,6 @@ void BluetoothModule::sendCommand(const String &cmd) {
 
 void BluetoothModule::passthrough() {
   if (!_active) return;
-
   btSerial.listen();
 
   // PC Serial Monitor -> BT201
