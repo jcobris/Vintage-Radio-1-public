@@ -5,7 +5,9 @@
 #include "Config.h"  // pins + global debug macros
 
 namespace RadioTuning {
-  // Measures RC timing on the given digital pin and returns numeric folder (0..3).
-  // Internally keeps the original String-based state and stability logic intact.
+  // Measures RC timing on the given digital pin and returns:
+  //   1..4  = stable folder selection
+  //   99    = gap / between bands
+  //   255   = FAULT (timeout / measurement failure)
   uint8_t getFolder(uint8_t digitalPin);
 }

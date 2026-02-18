@@ -4,12 +4,9 @@
 
 // MP3 control for DY-SV5W (UART control)
 //
-// Folder scheme (logical, owned by main sketch):
-//   0..3  = your 4 SD folders (logical)
-//   99    = mute / gap (special state)
-//
-// Mapping:
-//   logical 0..3 -> module folder 1..4 (logical + 1)
+// Folder scheme (standardized):
+//   1..4  = SD folders 1..4
+//   99    = mute / gap
 //
 // Usage:
 //   - Call MP3::init() once in setup()
@@ -18,8 +15,8 @@
 //       MP3::tick();
 
 namespace MP3 {
-  void init();                             // call from main setup()
-  void tick();                             // call from main loop() (only in MP3 mode)
-  void setDesiredFolder(uint8_t folder);   // 0..3 or 99=mute
-  uint8_t getDesiredFolder();              // optional debug visibility
+  void init();
+  void tick();
+  void setDesiredFolder(uint8_t folder); // 1..4 or 99=mute
+  uint8_t getDesiredFolder();
 }
