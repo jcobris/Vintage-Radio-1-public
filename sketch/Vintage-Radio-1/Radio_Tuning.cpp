@@ -5,39 +5,34 @@
 
 // ---- Near real-time timing stream control ----
 #ifndef DEBUG_TIMING_STREAM
-  #define DEBUG_TIMING_STREAM 0
+ #define DEBUG_TIMING_STREAM 0
 #endif
-
 #ifndef DEBUG_TIMING_VERBOSE
-  #define DEBUG_TIMING_VERBOSE 0
+ #define DEBUG_TIMING_VERBOSE 0
 #endif
 
 namespace {
   uint8_t RC_PIN = Config::PIN_TUNING_INPUT;
-
-  const uint16_t DISCHARGE_MS  = 10;
-  const uint32_t TIMEOUT_US    = 2000000;   // 2 s safety
+  const uint16_t DISCHARGE_MS = 10;
+  const uint32_t TIMEOUT_US = 2000000; // 2 s safety
 
   // ---------------- Bands (µs) ----------------
   const uint32_t F03_LOWER_US = 0;
   const uint32_t F03_UPPER_US = 30;
-
   const uint32_t F02_LOWER_US = 41;
   const uint32_t F02_UPPER_US = 51;
-
   const uint32_t F01_LOWER_US = 65;
   const uint32_t F01_UPPER_US = 89;
-
-  const uint32_t F00_LOWER_US = 123;        // >=123 → folder 00 (no upper bound)
+  const uint32_t F00_LOWER_US = 123; // >=123 → folder 00 (no upper bound)
 
   // ---------------- Stability counts ----------------
-  const uint8_t  STABLE_COUNT_FOLDER = 4;
-  const uint8_t  STABLE_COUNT_GAP    = 4;
+  const uint8_t STABLE_COUNT_FOLDER = 4;
+  const uint8_t STABLE_COUNT_GAP = 4;
 
   // ---------------- State ----------------
-  String  currentFolder = "99";   // committed ("00".."03","99","FAULT")
-  String  pendingClass  = "99";
-  uint8_t pendingHits   = 0;
+  String currentFolder = "99"; // committed ("00".."03","99","FAULT")
+  String pendingClass = "99";
+  uint8_t pendingHits = 0;
 
   inline uint32_t measureRC_us_once() {
     pinMode(RC_PIN, OUTPUT);
@@ -59,12 +54,13 @@ namespace {
     delay(2);
     uint32_t c = measureRC_us_once(); if (c == 0) return 0;
 
-    #if DEBUG_TIMING_VERBOSE == 1
-      Serial.print("samples: a="); Serial.print(a);
-      Serial.print(" b=");        Serial.print(b);
-      Serial.print(" c=");        Serial.println(c);
-    #endif
+  #if DEBUG_TIMING_VERBOSE == 1
+    Serial.print("samples: a="); Serial.print(a);
+    Serial.print(" b="); Serial.print(b);
+    Serial.print(" c="); Serial.println(c);
+  #endif
 
+    // Cleaned: explicit boolean OR (median-of-three)
     if ((a <= b && b <= c) || (c <= b && b <= a)) return b;
     if ((b <= a && a <= c) || (c <= a && a <= b)) return a;
     return c;
@@ -99,7 +95,6 @@ namespace {
       Serial.print("FAULT");
       return;
     }
-
     uint8_t num = classToNumeric(clsOrCommitted);
     if (num >= 1 && num <= 4) {
       // Print as 01..04 to mirror old formatting
@@ -113,16 +108,15 @@ namespace {
   inline void stepFolderSelect() {
     uint32_t t_us = measureStable_us();
 
-    #if DEBUG_TIMING_STREAM == 1
-      String clsNow = (t_us == 0) ? "FAULT" : classifyBuckets(t_us);
-
-      Serial.print("t_us="); Serial.print(t_us);
-      Serial.print(" inst=");
-      printFolderColumn(clsNow);
-      Serial.print(" committed=");
-      printFolderColumn(currentFolder);
-      Serial.println();
-    #endif
+  #if DEBUG_TIMING_STREAM == 1
+    String clsNow = (t_us == 0) ? "FAULT" : classifyBuckets(t_us);
+    Serial.print("t_us="); Serial.print(t_us);
+    Serial.print(" inst=");
+    printFolderColumn(clsNow);
+    Serial.print(" committed=");
+    printFolderColumn(currentFolder);
+    Serial.println();
+  #endif
 
     if (t_us == 0) {
       if (currentFolder != "FAULT") {
@@ -130,7 +124,7 @@ namespace {
         Serial.println("folder=FAULT");
       }
       pendingClass = "FAULT";
-      pendingHits  = 0;
+      pendingHits = 0;
       return;
     }
 
@@ -140,17 +134,15 @@ namespace {
       pendingHits++;
     } else {
       pendingClass = cls;
-      pendingHits  = 1;
+      pendingHits = 1;
     }
 
-    const bool    isGap = (cls == "99");
-    const uint8_t need  = isGap ? STABLE_COUNT_GAP : STABLE_COUNT_FOLDER;
+    const bool isGap = (cls == "99");
+    const uint8_t need = isGap ? STABLE_COUNT_GAP : STABLE_COUNT_FOLDER;
 
     if (cls != currentFolder && pendingHits >= need) {
       currentFolder = cls;
-
       Serial.print("folder="); Serial.println(currentFolder);
-
       Serial.print("t_us="); Serial.print(t_us);
       Serial.print(" cls="); Serial.print(cls);
       Serial.print(" hits="); Serial.println(pendingHits);

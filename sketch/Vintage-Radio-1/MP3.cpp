@@ -143,7 +143,7 @@ static bool checkMP3OnlineWithTimeout(unsigned long timeoutMs) {
 // Public API
 void MP3::setDesiredFolder(uint8_t folder) {
   // Accept 1..4 or 99. Anything else clamps to 1.
-  if ((folder >= 1 && folder <= 4) || (folder == 99)) {
+  if (((folder >= 1 && folder <= 4) || (folder == 99))) {
     s_desiredFolder = folder;
   } else {
     s_desiredFolder = 1;

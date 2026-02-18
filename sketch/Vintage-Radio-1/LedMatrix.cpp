@@ -1,3 +1,4 @@
+
 // LEDMatrix.cpp
 #include "LedMatrix.h"
 
@@ -30,17 +31,21 @@ namespace LedMatrix {
   static uint8_t flickerJitter[32] = {0};
 
   // Noise time + horizontal drift for global sparks
-  static uint32_t sparkNoiseTime  = 0;
+  static uint32_t sparkNoiseTime = 0;
   static uint32_t sparkNoiseTime2 = 0;
-  static int32_t  sparkDriftX     = 0;
+  static int32_t sparkDriftX = 0;
 
   // Helpers
   static inline uint16_t blockBaseIndex(uint16_t column) { return column * 8; }
+
   static inline uint8_t mixWeighted(uint8_t self, uint8_t neighbor, uint8_t neighborWeight) {
     uint16_t acc = (uint16_t)self * (255 - neighborWeight) + (uint16_t)neighbor * neighborWeight;
     return (uint8_t)(acc / 255);
   }
-  static inline uint8_t mix8(uint8_t a, uint8_t b, uint8_t w) { return mixWeighted(a, b, w); }
+
+  static inline uint8_t mix8(uint8_t a, uint8_t b, uint8_t w) {
+    return mixWeighted(a, b, w);
+  }
 }
 
 using namespace LedMatrix;
@@ -68,9 +73,12 @@ static void renderPartyMarble() {
     uint16_t z = (uint16_t)(partyTime + (swirlA / 2) + (swirlB / 3));
     uint8_t n = inoise8((uint16_t)(x & 0xFFFF), z);
     uint8_t index = qadd8(n, 30);
+
     CRGB color = ColorFromPalette(partyPalette, index, 255);
     uint16_t base = blockBaseIndex(col);
-    for (uint8_t i = 0; i < 8; ++i) { leds[base + i] = color; }
+    for (uint8_t i = 0; i < 8; ++i) {
+      leds[base + i] = color;
+    }
   }
 }
 
@@ -82,19 +90,24 @@ static void renderFireColumns() {
   }
 
   // 2) Global multi-octave noise-driven sparks (anywhere), with horizontal drift
-  sparkNoiseTime  += FIRE_SPARK_NOISE_SPEED;
+  sparkNoiseTime += FIRE_SPARK_NOISE_SPEED;
   sparkNoiseTime2 += FIRE_SPARK_NOISE_SPEED2;
-  sparkDriftX     += (int32_t)FIRE_SPARK_DRIFT_SPEED;
+  sparkDriftX += (int32_t)FIRE_SPARK_DRIFT_SPEED;
 
   for (uint8_t col = 0; col < 32; ++col) {
-    uint16_t x1 = (uint16_t)(col * FIRE_SPARK_NOISE_SCALE  + (sparkDriftX & 0xFFFF));
+    uint16_t x1 = (uint16_t)(col * FIRE_SPARK_NOISE_SCALE + (sparkDriftX & 0xFFFF));
     uint16_t x2 = (uint16_t)(col * FIRE_SPARK_NOISE_SCALE2 - ((sparkDriftX / 2) & 0xFFFF));
+
     uint8_t n1 = inoise8(x1, (uint16_t)sparkNoiseTime);
     uint8_t n2 = inoise8(x2, (uint16_t)sparkNoiseTime2);
     uint8_t nCombined = mix8(n1, n2, FIRE_SPARK_OCTAVE_BLEND);
+
     uint8_t prob = (uint8_t)map(nCombined, 0, 255, FIRE_SPARK_MIN_PROB, FIRE_SPARK_MAX_PROB);
     if (random8() < prob) {
-      fireHeat[col] = qadd8(fireHeat[col], random8(FIRE_GLOBAL_SPARK_HEAT_MIN, FIRE_GLOBAL_SPARK_HEAT_MAX));
+      fireHeat[col] = qadd8(
+        fireHeat[col],
+        random8(FIRE_GLOBAL_SPARK_HEAT_MIN, FIRE_GLOBAL_SPARK_HEAT_MAX)
+      );
     }
   }
 
@@ -123,17 +136,19 @@ static void renderFireColumns() {
   // 6) Render: write amber glow base, then overlay flame using channel-wise max()
   for (uint8_t col = 0; col < 32; ++col) {
     // --- Amber glow base ---
-    uint8_t glowV  = (uint8_t)map(glowTrack[col], 0, 255, GLOW_VAL_MIN, GLOW_VAL_MAX);
-    CHSV   glowHSV(GLOW_HUE, GLOW_SAT, glowV);
-    CRGB   baseGlow = glowHSV;
+    uint8_t glowV = (uint8_t)map(glowTrack[col], 0, 255, GLOW_VAL_MIN, GLOW_VAL_MAX);
+    CHSV glowHSV(GLOW_HUE, GLOW_SAT, glowV);
+    CRGB baseGlow = glowHSV;
 
     uint16_t base = blockBaseIndex(col);
-    for (uint8_t i = 0; i < 8; ++i) { leds[base + i] = baseGlow; }
+    for (uint8_t i = 0; i < 8; ++i) {
+      leds[base + i] = baseGlow;
+    }
 
     // --- Flame overlay (with calmer flicker) ---
     uint8_t jitter = flickerJitter[col];
-    uint8_t vBase  = qadd8(FIRE_BASE_BRIGHTNESS, jitter);
-    CRGB flame     = ColorFromPalette(HeatColors_p, fireHeat[col], vBase);
+    uint8_t vBase = qadd8(FIRE_BASE_BRIGHTNESS, jitter);
+    CRGB flame = ColorFromPalette(HeatColors_p, fireHeat[col], vBase);
 
     // Overlay using channel-wise max so flame never gets dimmed
     for (uint8_t i = 0; i < 8; ++i) {
@@ -152,7 +167,9 @@ static void renderXmasColumns() {
   for (uint16_t col = 0; col < 32; ++col) {
     CRGB color = (col < 16) ? CRGB(brightA, 0, 0) : CRGB(0, brightB, 0);
     uint16_t base = blockBaseIndex(col);
-    for (uint8_t i = 0; i < 8; ++i) { leds[base + i] = color; }
+    for (uint8_t i = 0; i < 8; ++i) {
+      leds[base + i] = color;
+    }
   }
 }
 
@@ -165,11 +182,14 @@ static void renderSpookyColumns() {
     uint16_t z = (uint16_t)(spookyTime);
     uint8_t n = inoise8((uint16_t)(x & 0xFFFF), z);
     uint8_t index = qadd8(n, 40);
+
     CRGB color = ColorFromPalette(spookyPalette, index, 255);
     color.nscale8_video(pulse);
 
     uint16_t base = blockBaseIndex(col);
-    for (uint8_t i = 0; i < 8; ++i) { leds[base + i] = color; }
+    for (uint8_t i = 0; i < 8; ++i) {
+      leds[base + i] = color;
+    }
   }
 }
 
@@ -177,6 +197,7 @@ static void renderSpookyColumns() {
 void LedMatrix::update(uint8_t folder, bool lightsOn) {
   const uint32_t now = millis();
 
+  // Cleaned: explicit boolean OR (no line-continuation artifacts)
   if (!lightsOn || folder == 99) {
     clear();
     FastLED.show();
@@ -190,7 +211,9 @@ void LedMatrix::update(uint8_t folder, bool lightsOn) {
   switch (folder) {
     case 1: renderPartyMarble(); break;
     case 2:
-      for (uint8_t i = 0; i < FIRE_SPEED_SCALE; ++i) { renderFireColumns(); }
+      for (uint8_t i = 0; i < FIRE_SPEED_SCALE; ++i) {
+        renderFireColumns();
+      }
       break;
     case 3: renderXmasColumns(); break;
     case 4: renderSpookyColumns(); break;
