@@ -63,6 +63,14 @@ namespace Config {
   // --- LED Matrix data pin ---
   // Requirement: Matrix data = D7
   constexpr uint8_t PIN_MATRIX_DATA = 7; // D7
+
+  // ----------------------------------------------------------
+  // Display behaviour constants (single source of truth)
+  // ----------------------------------------------------------
+  constexpr uint8_t  DISPLAY_SOLID_BRIGHT = 60;  // folders 1–3 solid
+  constexpr uint8_t  DISPLAY_PULSE_MIN    = 30;  // folder 4 pulse min
+  constexpr uint8_t  DISPLAY_PULSE_MAX    = 255; // folder 4 pulse max
+  constexpr uint16_t DISPLAY_PULSE_TICK_MS = 18; // folder 4 pulse cadence
 }
 
 // ------------------------------------------------------------

@@ -33,12 +33,12 @@ public:
 private:
   uint8_t _rxPin;
   uint8_t _txPin;
-  long    _baud;
-  bool    _active;
-
+  long _baud;
+  bool _active;
   SoftwareSerial btSerial;
 
-  void sendCommand(const String &cmd);
+  // Send an AT command stored in flash (F("...")).
+  void sendCommand(const __FlashStringHelper *cmd);
 };
 
 #endif // BLUETOOTH_H

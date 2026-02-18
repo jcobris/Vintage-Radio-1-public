@@ -7,10 +7,18 @@
 static SoftwareSerial mp3Serial(Config::PIN_MP3_RX, Config::PIN_MP3_TX);
 
 // Debug controls
-#define MP3_DEBUG_EVENTS 1
-#define MP3_DEBUG_FRAMES 0
-#define MP3_DEBUG_RX     0
-#define MP3_SERIAL_CONTROL 0
+#ifndef MP3_DEBUG_EVENTS
+ #define MP3_DEBUG_EVENTS (DEBUG == 1 ? 1 : 0)
+#endif
+#ifndef MP3_DEBUG_FRAMES
+ #define MP3_DEBUG_FRAMES 0
+#endif
+#ifndef MP3_DEBUG_RX
+ #define MP3_DEBUG_RX 0
+#endif
+#ifndef MP3_SERIAL_CONTROL
+ #define MP3_SERIAL_CONTROL 0
+#endif
 
 #define MP3_ONLINE_TIMEOUT_MS 5000UL
 
@@ -143,7 +151,7 @@ static bool checkMP3OnlineWithTimeout(unsigned long timeoutMs) {
 // Public API
 void MP3::setDesiredFolder(uint8_t folder) {
   // Accept 1..4 or 99. Anything else clamps to 1.
-  if (((folder >= 1 && folder <= 4) || (folder == 99))) {
+  if ((folder >= 1 && folder <= 4) || (folder == 99)) {
     s_desiredFolder = folder;
   } else {
     s_desiredFolder = 1;
@@ -208,7 +216,6 @@ void MP3::tick() {
 #endif
         sendCommand(CMD_VOL_MUTE, sizeof(CMD_VOL_MUTE));
       } else {
-        // desired is already 1..4 now
         syncFolderTo((int)desired);
         playRandomTrack();
       }

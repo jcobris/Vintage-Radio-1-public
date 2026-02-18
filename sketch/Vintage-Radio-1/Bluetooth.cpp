@@ -3,11 +3,11 @@
 #include "Bluetooth.h"
 
 BluetoothModule::BluetoothModule(uint8_t rxPin, uint8_t txPin)
- : _rxPin(rxPin),
-   _txPin(txPin),
-   _baud(0),
-   _active(false),
-   btSerial(rxPin, txPin) {
+  : _rxPin(rxPin),
+    _txPin(txPin),
+    _baud(0),
+    _active(false),
+    btSerial(rxPin, txPin) {
 }
 
 void BluetoothModule::begin(long baudRate) {
@@ -27,9 +27,11 @@ void BluetoothModule::wake() {
 
 void BluetoothModule::sleep() {
   if (!_active) return;
+
   // Stop SoftwareSerial to avoid background listening / interrupts
   btSerial.end();
   _active = false;
+
   // Tri-state the pins to reduce accidental driving/noise on shared breadboards
   pinMode(_rxPin, INPUT);
   pinMode(_txPin, INPUT);
@@ -43,25 +45,24 @@ void BluetoothModule::sendInitialCommands() {
   // Ensure serial is active for init
   if (!_active) wake();
 
-  // NOTE: This assumes the BT201 is already configured to use the baud rate
-  // you've selected (commonly 57600 in your current setup).
-  sendCommand("AT+CT04"); // Set baud rate to 57600 (kept per your working setup)
+  // All commands stored in flash via F("...") to avoid SRAM / heap churn
+  sendCommand(F("AT+CT04"));            // Set baud rate to 57600 (kept per your working setup)
   delay(50);
-  sendCommand("AT+BDO'l Timey Radio"); // Set Bluetooth name
+  sendCommand(F("AT+BDO'l Timey Radio"));// Set Bluetooth name
   delay(50);
-  sendCommand("AT+CK00"); // Disable auto-switch to Bluetooth
+  sendCommand(F("AT+CK00"));            // Disable auto-switch to Bluetooth
   delay(50);
-  sendCommand("AT+B200"); // Disable Bluetooth call functions
+  sendCommand(F("AT+B200"));            // Disable Bluetooth call functions
   delay(50);
-  sendCommand("AT+CA30"); // Volume 100%
+  sendCommand(F("AT+CA30"));            // Volume 100%
   delay(50);
-  sendCommand("AT+CN00"); // Disable prompt sounds
+  sendCommand(F("AT+CN00"));            // Disable prompt sounds
   delay(50);
-  sendCommand("AT+CQ01"); // EQ Rock
+  sendCommand(F("AT+CQ01"));            // EQ Rock
   delay(50);
 }
 
-void BluetoothModule::sendCommand(const String &cmd) {
+void BluetoothModule::sendCommand(const __FlashStringHelper *cmd) {
   if (!_active) return;
   btSerial.listen();
   btSerial.print(cmd);
@@ -74,14 +75,22 @@ void BluetoothModule::passthrough() {
   btSerial.listen();
 
   // PC Serial Monitor -> BT201
+  // Avoid String allocation: read a line into a fixed buffer.
   if (Serial.available()) {
-    String cmd = Serial.readStringUntil('\n');
-    cmd.trim();
-    if (cmd.length() > 0) {
-      btSerial.print(cmd);
+    char buf[64];
+    size_t n = Serial.readBytesUntil('\n', buf, sizeof(buf) - 1);
+    buf[n] = '\0';
+
+    // Trim trailing \r if present
+    if (n > 0 && buf[n - 1] == '\r') {
+      buf[n - 1] = '\0';
+    }
+
+    if (buf[0] != '\0') {
+      btSerial.print(buf);
       btSerial.print("\r\n");
       Serial.print(F("[DEBUG] Sent to BT: "));
-      Serial.println(cmd);
+      Serial.println(buf);
     }
   }
 
