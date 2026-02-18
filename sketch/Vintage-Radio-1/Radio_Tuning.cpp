@@ -7,7 +7,7 @@
 // Set to 1 to print t_us for every measurement step (continuous while sweeping).
 // Set to 0 to only print timing on stability commit.
 #ifndef DEBUG_TIMING_STREAM
-  #define DEBUG_TIMING_STREAM 1
+  #define DEBUG_TIMING_STREAM 0   // CHANGED: default OFF for normal operation
 #endif
 
 // Set to 1 to also print raw samples a/b/c for each step (noisy; good for calibration).
@@ -20,13 +20,10 @@ namespace {
   uint8_t RC_PIN = Config::PIN_TUNING_INPUT;
 
   // ---- Timing knobs (adjust if needed) ----
-  // DISCHARGE_MS ensures the RC node starts near 0 V before each measurement.
-  // Tune this based on your hardware; 20–50 ms is typical for fast bands.
   const uint16_t DISCHARGE_MS  = 10;
   const uint32_t TIMEOUT_US    = 2000000;   // 2 s safety
 
   // ---------------- Bands (µs) ----------------
-  // Latest values you dialed in:
   const uint32_t F03_LOWER_US = 0;
   const uint32_t F03_UPPER_US = 30;
 
@@ -109,8 +106,6 @@ namespace {
     return 99; // default to gap
   }
 
-  // Pretty-print a folder value (String) as zero-padded numeric if 00..03,
-  // "99" for gaps, "FAULT" verbatim.
   inline void printFolderColumn(const String& clsOrCommitted) {
     if (clsOrCommitted == "FAULT") {
       Serial.print("FAULT");
@@ -129,8 +124,6 @@ namespace {
   inline void stepFolderSelect() {
     uint32_t t_us = measureStable_us();
 
-    // Near real-time timing stream: print every step (unless disabled)
-    // Columns: t_us, inst=<instantaneous>, committed=<post-hysteresis>
     #if DEBUG_TIMING_STREAM == 1
       String clsNow = (t_us == 0) ? "FAULT" : classifyBuckets(t_us);
 
@@ -168,18 +161,14 @@ namespace {
     if (cls != currentFolder && pendingHits >= need) {
       currentFolder = cls;
 
-      // Original commit print
       Serial.print("folder="); Serial.println(currentFolder);
 
-      // Timing summary on commit (helps while calibrating band edges)
       Serial.print("t_us="); Serial.print(t_us);
       Serial.print(" cls="); Serial.print(cls);
       Serial.print(" hits="); Serial.println(pendingHits);
     }
   }
 
-  // Convert committed String folder → numeric:
-  // 00..03 -> 0..3, 99 -> 99 (explicit gap), FAULT -> 255
   inline uint8_t toNumericFolder(const String& s) {
     if (s == "00") return 0;
     if (s == "01") return 1;
@@ -191,14 +180,8 @@ namespace {
   }
 } // anonymous namespace
 
-// Public API: run one stability step and return numeric folder (0..3, 99 for gap, 255 for FAULT)
 uint8_t RadioTuning::getFolder(uint8_t digitalPin) {
-  // Bind the pin (if you ever change it at runtime)
   RC_PIN = digitalPin;
-
-  // Execute one step: measure + stability + prints
   stepFolderSelect();
-
-  // Return the current committed numeric value directly (no fallback across gaps)
   return toNumericFolder(currentFolder);
 }

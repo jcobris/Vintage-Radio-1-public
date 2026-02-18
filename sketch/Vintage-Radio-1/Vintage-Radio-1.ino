@@ -33,7 +33,7 @@
 constexpr uint16_t SOURCE_DEBOUNCE_MS = 50;
 
 // When tuner is not connected, force a default folder so MP3 can still play.
-constexpr uint8_t DEFAULT_FOLDER_WHEN_NO_TUNER = 0;
+constexpr uint8_t DEFAULT_FOLDER_WHEN_NO_TUNER = 3;
 
 // Shared state
 static uint8_t g_currentFolder = DEFAULT_FOLDER_WHEN_NO_TUNER;
