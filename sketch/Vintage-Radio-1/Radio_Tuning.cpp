@@ -41,7 +41,7 @@ namespace {
   const uint32_t FOLDER2_UPPER_US = 89;
 
   // Folder 1 (old "00")
-  const uint32_t FOLDER1_LOWER_US = 104; // >=123 => folder 1 
+  const uint32_t FOLDER1_LOWER_US = 100; // maybe 104 >=123 => folder 1 
 
   // ---------------- Stability counts ----------------
   const uint8_t STABLE_COUNT_FOLDER = 4;
