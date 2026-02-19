@@ -23,35 +23,37 @@ namespace {
   // Folder 2 = old "01" band
   // Folder 1 = old "00" band
   // 99 = gap / dead space between bands
+  // 255 = fault (timeout)
   // ============================================================
 
   // Folder 4 (old "03")
   const uint32_t FOLDER4_LOWER_US = 0;
-
-  // CHANGED: was 30. Lowering this widens the GAP before folder 3
-  // so folder 3 is less likely to flap with folder 4 when jitter occurs.
-  const uint32_t FOLDER4_UPPER_US = 30; // was 30
+  const uint32_t FOLDER4_UPPER_US = 30; // your tuned value
 
   // Folder 3 (old "02")
-  const uint32_t FOLDER3_LOWER_US = 36; // was 32 (from earlier stabilisation)
-  const uint32_t FOLDER3_UPPER_US = 44;
+  const uint32_t FOLDER3_LOWER_US = 36; // your tuned value
+  const uint32_t FOLDER3_UPPER_US = 44; // your tuned value
 
   // Folder 2 (old "01")
-  const uint32_t FOLDER2_LOWER_US = 60; // (from earlier stabilisation)
-  const uint32_t FOLDER2_UPPER_US = 84;
+  const uint32_t FOLDER2_LOWER_US = 52; // your tuned value
+  const uint32_t FOLDER2_UPPER_US = 84; // your tuned value
 
   // Folder 1 (old "00")
-  const uint32_t FOLDER1_LOWER_US = 100; // maybe 104 >=123 => folder 1 
+  const uint32_t FOLDER1_LOWER_US = 100; // your tuned value
 
   // ---------------- Stability counts ----------------
   const uint8_t STABLE_COUNT_FOLDER = 4;
-  const uint8_t STABLE_COUNT_GAP = 8;  // was 4
+  const uint8_t STABLE_COUNT_GAP    = 8;  // your tuned value
 
-  // ---------------- State ----------------
+  // ---------------- State (numeric; avoids String heap use) ----------------
   static uint8_t currentFolder = 99; // committed
-  static uint8_t pendingClass = 99;  // candidate classification
-  static uint8_t pendingHits = 0;
+  static uint8_t pendingClass  = 99; // candidate classification
+  static uint8_t pendingHits   = 0;
 
+  // NEW: latest instantaneous classification from last measurement (1 byte SRAM)
+  static uint8_t lastInstantClass = 99;
+
+  // ---------- Measurement helpers ----------
   inline uint32_t measureRC_us_once() {
     pinMode(RC_PIN, OUTPUT);
     digitalWrite(RC_PIN, LOW);
@@ -65,7 +67,7 @@ namespace {
     return micros() - t0;
   }
 
-  // Median-of-three sampling
+  // Median-of-three sampling (unchanged behaviour) [1](https://teamtelstra-my.sharepoint.com/personal/jeff_c_cornwell_team_telstra_com/Documents/Microsoft%20Copilot%20Chat%20Files/Radio_Tuning.cpp)
   inline uint32_t measureStable_us() {
     uint32_t a = measureRC_us_once(); if (a == 0) return 0;
     delay(2);
@@ -79,11 +81,13 @@ namespace {
     Serial.print(" c="); Serial.println(c);
 #endif
 
+    // median-of-three
     if ((a <= b && b <= c) || (c <= b && b <= a)) return b;
     if ((b <= a && a <= c) || (c <= a && a <= b)) return a;
     return c;
   }
 
+  // Classify timing into standardized folder values (1..4, 99 gap) [1](https://teamtelstra-my.sharepoint.com/personal/jeff_c_cornwell_team_telstra_com/Documents/Microsoft%20Copilot%20Chat%20Files/Radio_Tuning.cpp)
   inline uint8_t classifyToFolder(uint32_t t_us) {
     // Gaps between bands -> 99
     if (t_us > FOLDER4_UPPER_US && t_us < FOLDER3_LOWER_US) return 99;
@@ -101,14 +105,19 @@ namespace {
 
   inline void printFolderValue(uint8_t f) {
     if (f == 255) { Serial.print("FAULT"); return; }
-    if (f >= 1 && f <= 4) { if (f < 10) Serial.print('0'); Serial.print(f); return; }
-    Serial.print((int)f);
+    if (f >= 1 && f <= 4) {
+      if (f < 10) Serial.print('0');
+      Serial.print(f);
+      return;
+    }
+    Serial.print((int)f); // 99 (or anything unexpected)
   }
 
   inline void stepFolderSelect() {
     const uint32_t t_us = measureStable_us();
 
 #if DEBUG_TIMING_STREAM == 1
+    // If t_us == 0 (timeout), inst is FAULT
     const uint8_t inst = (t_us == 0) ? 255 : classifyToFolder(t_us);
     Serial.print("t_us="); Serial.print(t_us);
     Serial.print(" inst="); printFolderValue(inst);
@@ -116,7 +125,9 @@ namespace {
     Serial.println();
 #endif
 
+    // Fault path (timeout)
     if (t_us == 0) {
+      lastInstantClass = 255; // NEW
       if (currentFolder != 255) {
         currentFolder = 255;
         Serial.println("folder=FAULT");
@@ -127,8 +138,17 @@ namespace {
     }
 
     const uint8_t cls = classifyToFolder(t_us);
-    if (cls == pendingClass) pendingHits++;
-    else { pendingClass = cls; pendingHits = 1; }
+
+    // NEW: record instantaneous classification every measurement
+    lastInstantClass = cls;
+
+    // Existing stability/commit logic (unchanged) [1](https://teamtelstra-my.sharepoint.com/personal/jeff_c_cornwell_team_telstra_com/Documents/Microsoft%20Copilot%20Chat%20Files/Radio_Tuning.cpp)
+    if (cls == pendingClass) {
+      pendingHits++;
+    } else {
+      pendingClass = cls;
+      pendingHits = 1;
+    }
 
     const bool isGap = (cls == 99);
     const uint8_t need = isGap ? STABLE_COUNT_GAP : STABLE_COUNT_FOLDER;
@@ -136,9 +156,11 @@ namespace {
     if (cls != currentFolder && pendingHits >= need) {
       currentFolder = cls;
 
+      // Preserve the existing style of “folder=...”
       Serial.print("folder=");
-      if (currentFolder == 255) Serial.println("FAULT");
-      else if (currentFolder >= 1 && currentFolder <= 4) {
+      if (currentFolder == 255) {
+        Serial.println("FAULT");
+      } else if (currentFolder >= 1 && currentFolder <= 4) {
         if (currentFolder < 10) Serial.print('0');
         Serial.println(currentFolder);
       } else {
@@ -150,10 +172,14 @@ namespace {
       Serial.print(" hits="); Serial.println(pendingHits);
     }
   }
-}
+} // anonymous namespace
 
 uint8_t RadioTuning::getFolder(uint8_t digitalPin) {
   RC_PIN = digitalPin;
   stepFolderSelect();
   return currentFolder;
+}
+
+uint8_t RadioTuning::getInstantClass() {
+  return lastInstantClass;
 }

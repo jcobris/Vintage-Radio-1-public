@@ -4,10 +4,9 @@
 #define DISPLAYLED_H
 
 #include <Arduino.h>
-#include <FastLED.h>  // for beatsin8 tempo utility
+#include <FastLED.h> // for beatsin8 tempo utility
 
 namespace DisplayLED {
-
   // Initialize PWM pin and set a default brightness
   void begin(uint8_t pin);
 
@@ -17,6 +16,10 @@ namespace DisplayLED {
   // Sine pulse between [minBright, maxBright] at a given BPM, throttled by tickMs.
   // Non-blocking; call every loop() tick.
   void pulseSineTick(uint8_t bpm, uint8_t minBright, uint8_t maxBright, uint16_t tickMs);
+
+  // NEW: quick random flicker between [minBright, maxBright], throttled by tickMs.
+  // Useful for "between stations" effect.
+  void flickerRandomTick(uint8_t minBright, uint8_t maxBright, uint16_t tickMs);
 }
 
 #endif // DISPLAYLED_H

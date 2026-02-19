@@ -18,13 +18,18 @@
 
    Folder numbering (STANDARDIZED: Option A):
      - 1..4  = real folders 1..4
-     - 99    = gap/mute
+     - 99    = gap/mute (MP3 uses this only if committed folder becomes 99)
      - 255   = FAULT (we map this to 99 here)
 
    Display Mode switch (3 poles to GND):
      - D3 LOW: Normal behaviour
      - D4 LOW: Alt theme (same as normal for now)
      - D5 LOW: Matrix OFF, tuner LED string solid for all 4 folders
+
+   NOTE (Between-stations visual):
+     - Matrix continues to show the committed folder theme (no blanking)
+     - Dial LED flickers when the *instantaneous* tuner classification is 99
+       (filtered by requiring consecutive instant-99 hits)
 */
 
 #include <Arduino.h>
@@ -50,6 +55,14 @@ static uint8_t g_currentFolder = DEFAULT_FOLDER_WHEN_NO_TUNER;
 static unsigned long g_lastTuneMs = 0;
 constexpr uint16_t   TUNE_FAST_MS = 300;  // when folder == 4
 constexpr uint16_t   TUNE_SLOW_MS = 600;  // when folder != 4
+
+// Latest instantaneous tuning classification from last measurement (1..4, 99, 255)
+static uint8_t g_instantTuneClass = 99;
+
+// A tiny filter so the dial flicker doesn't trigger on a single noisy sample.
+// Requires N consecutive instant==99 before we flicker.
+static uint8_t g_gapStreak = 0;
+constexpr uint8_t GAP_STREAK_REQUIRED = 1;   // try 2; increase to 3 if still too frequent
 
 static BluetoothModule btModule(Config::PIN_BT_RX, Config::PIN_BT_TX);
 
@@ -171,6 +184,7 @@ void loop() {
     const uint16_t tuneInterval = (g_currentFolder == 4) ? TUNE_FAST_MS : TUNE_SLOW_MS;
     if (now - g_lastTuneMs >= tuneInterval) {
       uint8_t f = RadioTuning::getFolder(Config::PIN_TUNING_INPUT);
+      g_instantTuneClass = RadioTuning::getInstantClass(); // instantaneous class from latest measurement [2](https://teamtelstra-my.sharepoint.com/personal/jeff_c_cornwell_team_telstra_com/Documents/Microsoft%20Copilot%20Chat%20Files/Radio_Tuning.cpp)
       g_lastTuneMs = now;
 
       f = sanitizeFolder(f);
@@ -183,42 +197,61 @@ void loop() {
       }
 
       g_currentFolder = f;
+
+      // Update gap streak filter (for dial flicker only)
+      if (g_instantTuneClass == 99) {
+        if (g_gapStreak < 255) g_gapStreak++;
+      } else {
+        g_gapStreak = 0;
+      }
     }
 #else
     g_currentFolder = DEFAULT_FOLDER_WHEN_NO_TUNER;
+    g_instantTuneClass = 99;
+    g_gapStreak = 0;
 #endif
+  } else {
+    // Not in MP3 mode: clear flicker state
+    g_gapStreak = 0;
   }
 
-  const uint8_t displayFolder = (mode == SourceMode::MP3) ? sanitizeFolder(g_currentFolder) : (uint8_t)1;
+  // Visual "between stations" only: require consecutive instant gap hits.
+  const bool visualGap = (mode == SourceMode::MP3) && (g_gapStreak >= GAP_STREAK_REQUIRED);
+
+  // MATRIX: Always driven by committed folder theme (NO blanking on instant gaps)
+  const uint8_t displayFolder = (mode == SourceMode::MP3)
+      ? sanitizeFolder(g_currentFolder)
+      : (uint8_t)1;
 
   const bool lightsOn = (dispMode != DisplayMode::MatrixOff);
-  LedMatrix::update(displayFolder, lightsOn);
+  LedMatrix::update(displayFolder, lightsOn); // matrix keeps running even if instant==99 [1](https://teamtelstra-my.sharepoint.com/personal/jeff_c_cornwell_team_telstra_com/Documents/Microsoft%20Copilot%20Chat%20Files/LedMatrix.cpp)
 
+  // Dial LED behaviour
   if (dispMode == DisplayMode::MatrixOff) {
     DisplayLED::setSolid(Config::DISPLAY_SOLID_BRIGHT);
   } else {
-    static uint8_t lastDisplayFolderSeen = 0;
-    const bool folderChanged = (displayFolder != lastDisplayFolderSeen);
-
-    if (folderChanged) {
-      lastDisplayFolderSeen = displayFolder;
-      if (displayFolder == 4) {
+    if (visualGap) {
+      // Between-stations flicker (visual only)
+      DisplayLED::flickerRandomTick(10, 80, 35);
+    } else {
+      // Normal dial light behaviour
+      if (displayFolder >= 1 && displayFolder <= 3) {
+        DisplayLED::setSolid(Config::DISPLAY_SOLID_BRIGHT);
+      } else if (displayFolder == 4) {
+        DisplayLED::pulseSineTick(
+          LedMatrix::SPOOKY_PULSE_BPM,
+          Config::DISPLAY_PULSE_MIN,
+          Config::DISPLAY_PULSE_MAX,
+          Config::DISPLAY_PULSE_TICK_MS
+        );
+      } else {
+        // If committed folder ever becomes 99, just hold solid (rare in your tuned setup)
         DisplayLED::setSolid(Config::DISPLAY_SOLID_BRIGHT);
       }
     }
-
-    if (displayFolder >= 1 && displayFolder <= 3) {
-      DisplayLED::setSolid(Config::DISPLAY_SOLID_BRIGHT);
-    } else if (displayFolder == 4) {
-      DisplayLED::pulseSineTick(
-        LedMatrix::SPOOKY_PULSE_BPM,
-        Config::DISPLAY_PULSE_MIN,
-        Config::DISPLAY_PULSE_MAX,
-        Config::DISPLAY_PULSE_TICK_MS
-      );
-    }
   }
 
+  // MP3 control: keep audio stable — do NOT mute on visualGap
   if (mode == SourceMode::MP3) {
     const uint8_t safeFolder = sanitizeFolder(g_currentFolder);
     MP3::setDesiredFolder(safeFolder);
