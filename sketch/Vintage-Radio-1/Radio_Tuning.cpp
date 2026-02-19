@@ -30,22 +30,22 @@ namespace {
 
   // CHANGED: was 30. Lowering this widens the GAP before folder 3
   // so folder 3 is less likely to flap with folder 4 when jitter occurs.
-  const uint32_t FOLDER4_UPPER_US = 27; // was 30
+  const uint32_t FOLDER4_UPPER_US = 30; // was 30
 
   // Folder 3 (old "02")
   const uint32_t FOLDER3_LOWER_US = 36; // was 32 (from earlier stabilisation)
-  const uint32_t FOLDER3_UPPER_US = 51;
+  const uint32_t FOLDER3_UPPER_US = 44;
 
   // Folder 2 (old "01")
   const uint32_t FOLDER2_LOWER_US = 60; // (from earlier stabilisation)
-  const uint32_t FOLDER2_UPPER_US = 89;
+  const uint32_t FOLDER2_UPPER_US = 84;
 
   // Folder 1 (old "00")
   const uint32_t FOLDER1_LOWER_US = 100; // maybe 104 >=123 => folder 1 
 
   // ---------------- Stability counts ----------------
   const uint8_t STABLE_COUNT_FOLDER = 4;
-  const uint8_t STABLE_COUNT_GAP = 4;
+  const uint8_t STABLE_COUNT_GAP = 8;  // was 4
 
   // ---------------- State ----------------
   static uint8_t currentFolder = 99; // committed
