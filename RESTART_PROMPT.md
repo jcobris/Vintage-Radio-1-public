@@ -70,10 +70,12 @@ I can rotate the knob slowly/quickly and hold at each position
 I can report observed behaviour (folder changes, dead-zone behaviour, fault occurrences)
 
 First task for you (Step 1 only)
+The tuning has been tested. When the capacitor tuning is disabled and the folder is set manually the MP3 plays as expected. When the capacitor is enabled the folder selection works properly (although needs refinment) but the music can't be heard. I suspect the mute setting from when the folder is at 99 (between channels) is this issue. Lets investigate this first.
+
+Next step will be to turn on debugging of the tuner so we can get the folder changes 100% 
+
 Design a minimal, safe data-collection approach to capture RC timing values and classification results for each knob position + dead spaces:
 
-what debug flag(s) to enable (and where)
-what format to print (please keep it compact)
-how often to print (rate-limit)
-exactly what I should do with the knob during the test (timing/sequence)
-what logs you need back from me
+Then we should look at ways to free up some arduino resources. Possibly by reducing some of the timing.
+
+Also there is an issue with the public github mirror. It doesn't seem to be updating.
