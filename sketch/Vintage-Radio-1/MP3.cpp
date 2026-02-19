@@ -36,6 +36,9 @@ static uint8_t lastDesiredSeen = 255;
 
 static bool s_mp3Online = false;
 
+// Track whether we've muted the module (volume set to 0) and need to restore
+static bool s_isMuted = false;
+
 // Commands
 static const byte CMD_CHECK_ONLINE[] = {0xAA, 0x09, 0x00, 0xB3};
 static const byte CMD_VOL_MUTE[]     = {0xAA, 0x13, 0x01, 0x00, 0xBE};
@@ -87,8 +90,22 @@ static void sendSetEQ(uint8_t mode) {
 }
 
 static void playRandomTrack() {
+  // 1) Choose random track in folder
   sendCommand(CMD_PLAY_RANDOM_IN_FOLDER, sizeof(CMD_PLAY_RANDOM_IN_FOLDER));
+
+  // 2) Restore volume AFTER random-in-folder, BEFORE play (only if we previously muted)
+  if (s_isMuted) {
+    sendSetVolume(volume);
+    s_isMuted = false;
+#if MP3_DEBUG_EVENTS == 1
+    Serial.print(F("MP3: Volume restored to "));
+    Serial.println(volume);
+#endif
+  }
+
+  // 3) Play
   sendCommand(CMD_PLAY, sizeof(CMD_PLAY));
+
 #if MP3_DEBUG_EVENTS == 1
   Serial.println(F("MP3: Playback started (random-in-folder)."));
 #endif
@@ -124,6 +141,8 @@ static void initialSetup() {
   delay(50);
   sendCommand(CMD_PLAY, sizeof(CMD_PLAY));
   delay(100);
+
+  s_isMuted = false;
 }
 
 static bool checkMP3OnlineWithTimeout(unsigned long timeoutMs) {
@@ -215,6 +234,7 @@ void MP3::tick() {
         Serial.println(F("MP3: Mute requested (99)"));
 #endif
         sendCommand(CMD_VOL_MUTE, sizeof(CMD_VOL_MUTE));
+        s_isMuted = true;
       } else {
         syncFolderTo((int)desired);
         playRandomTrack();

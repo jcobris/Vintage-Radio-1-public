@@ -40,7 +40,7 @@
 
 // -------------------- Compile-time controls --------------------
 #define BT_PASSTHROUGH 0
-#define TUNER_CONNECTED 0
+#define TUNER_CONNECTED 1
 
 constexpr uint16_t SOURCE_DEBOUNCE_MS = 50;
 constexpr uint8_t  DEFAULT_FOLDER_WHEN_NO_TUNER = 1;
