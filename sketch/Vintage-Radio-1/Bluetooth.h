@@ -6,26 +6,41 @@
 #include <Arduino.h>
 #include <SoftwareSerial.h>
 
+/*
+  ============================================================
+  Bluetooth Module (BT201) Wrapper
+  ============================================================
+
+  The BT201 is configured via AT commands at boot. After initialization,
+  its SoftwareSerial UART is usually put to sleep to prevent contention with
+  the MP3 module's SoftwareSerial.
+
+  Why sleep?
+  - SoftwareSerial uses interrupt timing and can interfere with other timing-sensitive
+    operations (including other SoftwareSerial instances and RC timing reads).
+  - Sleeping avoids background listening overhead and reduces jitter.
+
+  Optional passthrough:
+  - If enabled at compile time in the sketch, allows PC Serial Monitor <-> BT201 UART.
+*/
+
 class BluetoothModule {
 public:
-  // rxPin = Arduino pin connected to BT201 TX
-  // txPin = Arduino pin connected to BT201 RX
   BluetoothModule(uint8_t rxPin, uint8_t txPin);
 
-  // Start SoftwareSerial at the requested baud
+  // Begin SoftwareSerial at baudRate and set as active listener.
   void begin(long baudRate);
 
-  // Send initial AT configuration commands
+  // Send initial AT commands (stored in flash).
   void sendInitialCommands();
 
-  // Optional debug passthrough (PC Serial <-> BT module)
-  // Only works if the Bluetooth UART is active (not slept).
+  // Forward data between USB Serial and BT serial (only if UART is active).
   void passthrough();
 
-  // Disable Bluetooth SoftwareSerial to avoid interfering with MP3 SoftwareSerial
+  // Stop SoftwareSerial and tri-state pins (reduces interference).
   void sleep();
 
-  // Re-enable Bluetooth SoftwareSerial (uses last baud set by begin())
+  // Re-enable SoftwareSerial after sleep.
   void wake();
 
   bool isActive() const;
@@ -33,11 +48,10 @@ public:
 private:
   uint8_t _rxPin;
   uint8_t _txPin;
-  long _baud;
-  bool _active;
+  long    _baud;
+  bool    _active;
   SoftwareSerial btSerial;
 
-  // Send an AT command stored in flash (F("...")).
   void sendCommand(const __FlashStringHelper *cmd);
 };
 

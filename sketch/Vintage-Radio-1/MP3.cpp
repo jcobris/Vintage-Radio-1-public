@@ -4,20 +4,36 @@
 #include <Arduino.h>
 #include <SoftwareSerial.h>
 
+/*
+  ============================================================
+  DY-SV5W UART Protocol Notes
+  ============================================================
+
+  Commands are sent as byte frames beginning with 0xAA.
+  Many commands are fixed frames; volume/EQ commands use a checksum.
+
+  Timing / stability:
+  - SoftwareSerial can contribute to timing jitter elsewhere.
+  - This module avoids frequent bursts by doing work only when the desired
+    folder changes (checked at 500ms cadence).
+  - Delays after writes provide the module time to process commands.
+
+  Audio "gap" behaviour:
+  - desired=99 => volume set to 0 (mute)
+  - leaving 99 => volume restored BEFORE play
+*/
+
 static SoftwareSerial mp3Serial(Config::PIN_MP3_RX, Config::PIN_MP3_TX);
 
-// Debug controls
+// Debug controls (event prints are gated by DEBUG via MP3_DEBUG_EVENTS)
 #ifndef MP3_DEBUG_EVENTS
- #define MP3_DEBUG_EVENTS (DEBUG == 1 ? 1 : 0)
+  #define MP3_DEBUG_EVENTS (DEBUG == 1 ? 1 : 0)
 #endif
 #ifndef MP3_DEBUG_FRAMES
- #define MP3_DEBUG_FRAMES 0
+  #define MP3_DEBUG_FRAMES 0
 #endif
 #ifndef MP3_DEBUG_RX
- #define MP3_DEBUG_RX 0
-#endif
-#ifndef MP3_SERIAL_CONTROL
- #define MP3_SERIAL_CONTROL 0
+  #define MP3_DEBUG_RX 0
 #endif
 
 #define MP3_ONLINE_TIMEOUT_MS 5000UL
@@ -30,18 +46,19 @@ static volatile uint8_t s_desiredFolder = 1;
 // Internal tracking of current module folder (1..4)
 static int mp3Folder = 1;
 
+// Tick timing and one-shot gating
 static unsigned long lastCheck = 0;
 static bool folderSelected = false;
 static uint8_t lastDesiredSeen = 255;
 
 static bool s_mp3Online = false;
 
-// Track whether we've muted the module (volume set to 0) and need to restore
+// Tracks whether we previously muted so we can restore volume on resume
 static bool s_isMuted = false;
 
 // Commands
 static const byte CMD_CHECK_ONLINE[] = {0xAA, 0x09, 0x00, 0xB3};
-static const byte CMD_VOL_MUTE[]     = {0xAA, 0x13, 0x01, 0x00, 0xBE};
+static const byte CMD_VOL_MUTE[]     = {0xAA, 0x13, 0x01, 0x00, 0xBE}; // volume=0
 static const byte CMD_SET_SD[]       = {0xAA, 0x0B, 0x01, 0x01, 0xB7};
 static const byte CMD_NEXT_FOLDER[]  = {0xAA, 0x0F, 0x00, 0xB9};
 static const byte CMD_PREV_FOLDER[]  = {0xAA, 0x0E, 0x00, 0xB8};
@@ -90,10 +107,10 @@ static void sendSetEQ(uint8_t mode) {
 }
 
 static void playRandomTrack() {
-  // 1) Choose random track in folder
+  // 1) Select random track in current folder
   sendCommand(CMD_PLAY_RANDOM_IN_FOLDER, sizeof(CMD_PLAY_RANDOM_IN_FOLDER));
 
-  // 2) Restore volume AFTER random-in-folder, BEFORE play (only if we previously muted)
+  // 2) Restore volume after mute, before play
   if (s_isMuted) {
     sendSetVolume(volume);
     s_isMuted = false;
@@ -167,7 +184,8 @@ static bool checkMP3OnlineWithTimeout(unsigned long timeoutMs) {
   return false;
 }
 
-// Public API
+// -------------------- Public API --------------------
+
 void MP3::setDesiredFolder(uint8_t folder) {
   // Accept 1..4 or 99. Anything else clamps to 1.
   if ((folder >= 1 && folder <= 4) || (folder == 99)) {
@@ -203,6 +221,7 @@ void MP3::init() {
 void MP3::tick() {
   if (!s_mp3Online) return;
 
+  // Drain RX (optional debug)
   while (mp3Serial.available()) {
     byte incoming = mp3Serial.read();
 #if (MP3_DEBUG_FRAMES == 1) || (MP3_DEBUG_RX == 1)
@@ -214,11 +233,13 @@ void MP3::tick() {
 #endif
   }
 
+  // Act only every 500ms to reduce command traffic
   if (millis() - lastCheck >= 500) {
     lastCheck = millis();
 
     const uint8_t desired = s_desiredFolder;
 
+    // Detect folder change
     if (desired != lastDesiredSeen) {
       lastDesiredSeen = desired;
       folderSelected = false;
@@ -228,6 +249,7 @@ void MP3::tick() {
 #endif
     }
 
+    // One-shot action per desired folder value
     if (!folderSelected) {
       if (desired == 99) {
 #if MP3_DEBUG_EVENTS == 1

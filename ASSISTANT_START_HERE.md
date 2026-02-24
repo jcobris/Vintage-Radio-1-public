@@ -35,4 +35,4 @@ https://github.com/jcobris/Vintage-Radio-1-public
 - Current working sketch: `sketch/Vintage-Radio-1.ino`
 
 ## Typical Session Goal
-- Help merge and refine functionality safely, incrementally, with clear acceptance checks.
+- The tuner Display LEDs create a high pitch audio signal through the amplifier. Lets look at ways to mitigate the noise.

@@ -48,6 +48,7 @@ namespace DisplayLED {
       maxBright = tmp;
     }
 
+    // random8(a,b) returns [a, b) so we use maxBright+1 carefully.
     const uint8_t val = random8(minBright, (uint8_t)(maxBright + 1));
     if (val != s_currentBright) {
       s_currentBright = val;
