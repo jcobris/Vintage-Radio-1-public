@@ -51,15 +51,15 @@ namespace {
   // Gap:      (84,100)
   // Folder 1: >=100
   const uint32_t FOLDER4_LOWER_US = 0;
-  const uint32_t FOLDER4_UPPER_US = 30;
+  const uint32_t FOLDER4_UPPER_US = 44;
 
-  const uint32_t FOLDER3_LOWER_US = 36;
-  const uint32_t FOLDER3_UPPER_US = 44;
+  const uint32_t FOLDER3_LOWER_US = 52;
+  const uint32_t FOLDER3_UPPER_US = 60;
 
-  const uint32_t FOLDER2_LOWER_US = 60;
+  const uint32_t FOLDER2_LOWER_US = 68;
   const uint32_t FOLDER2_UPPER_US = 84;
 
-  const uint32_t FOLDER1_LOWER_US = 100;
+  const uint32_t FOLDER1_LOWER_US = 96;
 
   // Stability requirements
   const uint8_t STABLE_COUNT_FOLDER = 4;

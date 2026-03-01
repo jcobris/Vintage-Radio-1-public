@@ -28,7 +28,7 @@
 // You can override this at compile time or by defining DEBUG before
 // including Config.h in a translation unit (not recommended unless deliberate).
 #ifndef DEBUG
-  #define DEBUG 0
+  #define DEBUG 1
 #endif
 
 #if DEBUG == 1
