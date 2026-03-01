@@ -1,5 +1,6 @@
 
 #include <Arduino.h>
+#include <FastLED.h>
 
 #include "Config.h"
 #include "LedMatrix.h"
@@ -7,6 +8,33 @@
 #include "Radio_Tuning.h"
 #include "MP3.h"
 #include "Bluetooth.h"
+
+// ============================================================
+// USER‑TWEAKABLE BRIGHTNESS (ALL IN ONE PLACE)
+// ============================================================
+
+// Matrix brightness (FastLED global)
+static const uint8_t MATRIX_BRIGHT_NORMAL = 200;
+static const uint8_t MATRIX_BRIGHT_ALT    = 100;
+
+// Dial / tuning illumination LED
+static const uint8_t DIAL_SOLID_NORMAL = 60;
+static const uint8_t DIAL_SOLID_ALT    = 25;
+
+// Pulse behaviour (folder 4)
+static const uint8_t DIAL_PULSE_MIN_NORMAL = 30;
+static const uint8_t DIAL_PULSE_MAX_NORMAL = 255;
+static const uint8_t DIAL_PULSE_MIN_ALT    = 10;
+static const uint8_t DIAL_PULSE_MAX_ALT    = 120;
+static const uint16_t DIAL_PULSE_TICK_MS   = 18;
+static const uint8_t  DIAL_PULSE_BPM       = 12;
+
+// Flicker behaviour (between stations)
+static const uint8_t  DIAL_FLICKER_MIN_NORMAL = 30;
+static const uint8_t  DIAL_FLICKER_MAX_NORMAL = 160;
+static const uint8_t  DIAL_FLICKER_MIN_ALT    = 10;
+static const uint8_t  DIAL_FLICKER_MAX_ALT    = 70;
+static const uint16_t DIAL_FLICKER_TICK_MS    = 40;
 
 // ============================================================
 // Display mode (3‑way switch)
@@ -21,23 +49,42 @@ static DisplayMode g_displayMode     = DISPLAY_NORMAL;
 static DisplayMode g_lastDisplayMode = (DisplayMode)255;
 
 // ============================================================
+// Source mode
+// ============================================================
+enum SourceMode {
+  SOURCE_MP3,
+  SOURCE_BT
+};
+
+static SourceMode g_sourceMode     = SOURCE_BT;
+static SourceMode g_lastSourceMode = (SourceMode)255;
+
+// ============================================================
 // State
 // ============================================================
-static uint8_t g_folder = 1;
+static uint8_t  g_folder = 1;
+static uint32_t g_lastTunePollMs = 0;
+static const uint16_t TUNE_POLL_MS = 120;
+
 static BluetoothModule g_bt(Config::PIN_BT_RX, Config::PIN_BT_TX);
 
 // ============================================================
 // Helpers
 // ============================================================
 static DisplayMode readDisplayMode() {
-  // INPUT_PULLUP, LOW = selected
-  if (digitalRead(Config::PIN_DISPLAY_MODE_OFF) == LOW) {
-    return DISPLAY_OFF;
-  }
-  if (digitalRead(Config::PIN_DISPLAY_MODE_ALT) == LOW) {
-    return DISPLAY_ALT;
-  }
+  if (digitalRead(Config::PIN_DISPLAY_MODE_OFF) == LOW) return DISPLAY_OFF;
+  if (digitalRead(Config::PIN_DISPLAY_MODE_ALT) == LOW) return DISPLAY_ALT;
   return DISPLAY_NORMAL;
+}
+
+static SourceMode readSourceMode() {
+  return (digitalRead(Config::PIN_SOURCE_DETECT) == LOW) ? SOURCE_MP3 : SOURCE_BT;
+}
+
+static uint8_t sanitizeFolder(uint8_t f) {
+  if (f >= 1 && f <= 4) return f;
+  if (f == 99) return 99;
+  return 99;
 }
 
 // ============================================================
@@ -47,13 +94,11 @@ void setup() {
   Serial.begin(115200);
   delay(200);
 
-  // Switch inputs
+  pinMode(Config::PIN_SOURCE_DETECT, INPUT_PULLUP);
   pinMode(Config::PIN_DISPLAY_MODE_NORMAL, INPUT_PULLUP);
   pinMode(Config::PIN_DISPLAY_MODE_ALT,    INPUT_PULLUP);
   pinMode(Config::PIN_DISPLAY_MODE_OFF,    INPUT_PULLUP);
-  pinMode(Config::PIN_SOURCE_DETECT,       INPUT_PULLUP);
 
-  // Subsystems
   LedMatrix::begin();
   DisplayLED::begin(Config::PIN_LED_DISPLAY);
 
@@ -63,6 +108,8 @@ void setup() {
 
   MP3::init();
 
+  FastLED.setBrightness(MATRIX_BRIGHT_NORMAL);
+
   debugln(F("[BOOT] System ready"));
 }
 
@@ -70,9 +117,10 @@ void setup() {
 // Loop
 // ============================================================
 void loop() {
+  const uint32_t now = millis();
 
   // ----------------------------------------------------------
-  // Display mode handling (ONLY detection + debug)
+  // Display mode
   // ----------------------------------------------------------
   g_displayMode = readDisplayMode();
   if (g_displayMode != g_lastDisplayMode) {
@@ -81,44 +129,83 @@ void loop() {
     switch (g_displayMode) {
       case DISPLAY_NORMAL:
         debugln(F("Display mode: NORMAL"));
+        FastLED.setBrightness(MATRIX_BRIGHT_NORMAL);
         break;
+
       case DISPLAY_ALT:
         debugln(F("Display mode: ALTERNATE"));
+        FastLED.setBrightness(MATRIX_BRIGHT_ALT);
         break;
+
       case DISPLAY_OFF:
         debugln(F("Display mode: MATRIX_OFF"));
         break;
     }
   }
 
-  // ----------------------------------------------------------
-  // Folder selection (unchanged)
-  // ----------------------------------------------------------
-  g_folder = RadioTuning::getFolder(Config::PIN_TUNING_INPUT);
+  const bool altMode  = (g_displayMode == DISPLAY_ALT);
+  const bool lightsOn = (g_displayMode != DISPLAY_OFF);
 
   // ----------------------------------------------------------
-  // Source handling (unchanged)
+  // Source mode
   // ----------------------------------------------------------
-  if (digitalRead(Config::PIN_SOURCE_DETECT) == LOW) {
-    // MP3 selected
-    g_bt.sleep();
-    MP3::setDesiredFolder(g_folder);
-    MP3::tick();
-  } else {
-    // Bluetooth selected
-    g_bt.wake();
-    g_folder = 1; // Party display for BT
+  g_sourceMode = readSourceMode();
+  if (g_sourceMode != g_lastSourceMode) {
+    g_lastSourceMode = g_sourceMode;
+    if (g_sourceMode == SOURCE_BT) {
+      g_bt.wake();
+      debugln(F("[SRC] Bluetooth"));
+    } else {
+      g_bt.sleep();
+      debugln(F("[SRC] MP3"));
+    }
   }
 
   // ----------------------------------------------------------
-  // Display outputs (UNCHANGED APIs)
+  // Folder selection
   // ----------------------------------------------------------
-  const bool lightsOn = (g_displayMode != DISPLAY_OFF);
+  if (g_sourceMode == SOURCE_MP3) {
+    if (now - g_lastTunePollMs >= TUNE_POLL_MS) {
+      g_lastTunePollMs = now;
+      g_folder = sanitizeFolder(RadioTuning::getFolder(Config::PIN_TUNING_INPUT));
+    }
+  } else {
+    g_folder = 1;
+  }
 
-  // DisplayLED behaviour is handled internally as before
-  // (no update() call here)
+  // ----------------------------------------------------------
+  // MP3 control
+  // ----------------------------------------------------------
+  if (g_sourceMode == SOURCE_MP3) {
+    MP3::setDesiredFolder(g_folder);
+    MP3::tick();
+  }
 
-  // Matrix call EXACTLY matches existing API
+  // ----------------------------------------------------------
+  // Dial LED (dimmed in ALT)
+  // ----------------------------------------------------------
+  if (!lightsOn) {
+    DisplayLED::setSolid(altMode ? DIAL_SOLID_ALT : DIAL_SOLID_NORMAL);
+  } else if (g_folder == 99) {
+    DisplayLED::flickerRandomTick(
+      altMode ? DIAL_FLICKER_MIN_ALT : DIAL_FLICKER_MIN_NORMAL,
+      altMode ? DIAL_FLICKER_MAX_ALT : DIAL_FLICKER_MAX_NORMAL,
+      DIAL_FLICKER_TICK_MS
+    );
+  } else if (g_folder == 4) {
+    DisplayLED::pulseSineTick(
+      DIAL_PULSE_BPM,
+      altMode ? DIAL_PULSE_MIN_ALT : DIAL_PULSE_MIN_NORMAL,
+      altMode ? DIAL_PULSE_MAX_ALT : DIAL_PULSE_MAX_NORMAL,
+      DIAL_PULSE_TICK_MS
+    );
+  } else {
+    DisplayLED::setSolid(altMode ? DIAL_SOLID_ALT : DIAL_SOLID_NORMAL);
+  }
+
+  // ----------------------------------------------------------
+  // Matrix (patterns unchanged; brightness via FastLED)
+  // ----------------------------------------------------------
   LedMatrix::update(g_folder, lightsOn);
 }
 
