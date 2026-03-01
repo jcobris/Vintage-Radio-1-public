@@ -53,7 +53,7 @@ namespace LedMatrix {
 
   // WS2812 color order and global brightness
   static const EOrder COLOR_ORDER = GRB;
-  static const uint8_t BRIGHTNESS = 50;
+  static const uint8_t BRIGHTNESS = 200;
 
   // Frame pacing for non-blocking update
   static const uint16_t FRAME_INTERVAL_MS = 15;
