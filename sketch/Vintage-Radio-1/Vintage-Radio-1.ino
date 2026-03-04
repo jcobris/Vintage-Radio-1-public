@@ -4,6 +4,7 @@
 
 #include "Config.h"
 #include "LedMatrix.h"
+#include "LedStrip.h"
 #include "DisplayLED.h"
 #include "Radio_Tuning.h"
 #include "MP3.h"
@@ -110,7 +111,10 @@ void setup() {
   g_nextBtnStable = g_nextBtnRaw;
   g_nextBtnLastChangeMs = millis();
 
+  // FastLED controllers:
   LedMatrix::begin();
+  LedStrip::begin();
+
   DisplayLED::begin(Config::PIN_LED_DISPLAY);
 
   g_bt.begin(Config::BT_BAUD);
@@ -192,11 +196,16 @@ void loop() {
   }
 
   // ----------------------------------------------------------
-  // Folder selection
+  // Folder selection (Option 1: isolate RC timing from FastLED.show)
   // ----------------------------------------------------------
+  bool didTunePollThisLoop = false;
+
   if (g_sourceMode == SOURCE_MP3) {
     if (now - g_lastTunePollMs >= TUNE_POLL_MS) {
       g_lastTunePollMs = now;
+      didTunePollThisLoop = true;
+
+      // Perform RC measurement + commit logic
       g_folder = sanitizeFolder(RadioTuning::getFolder(Config::PIN_TUNING_INPUT));
     }
   } else {
@@ -234,7 +243,15 @@ void loop() {
   }
 
   // ----------------------------------------------------------
-  // Matrix (patterns unchanged; brightness via FastLED)
+  // LEDs (Option 1): skip LED updates on the RC-measurement iteration
+  // This prevents FastLED.show() (called inside LedMatrix::update) from
+  // overlapping the RC timing measurement window. [1](https://teamtelstra-my.sharepoint.com/personal/jeff_c_cornwell_team_telstra_com/Documents/Microsoft%20Copilot%20Chat%20Files/LedMatrix.cpp)
   // ----------------------------------------------------------
-  LedMatrix::update(g_folder, lightsOn);
+  if (!didTunePollThisLoop) {
+    // Strip update first (no FastLED.show() here)
+    LedStrip::update(g_folder, lightsOn);
+
+    // Matrix update (calls FastLED.show())
+    LedMatrix::update(g_folder, lightsOn); // show happens inside update [1](https://teamtelstra-my.sharepoint.com/personal/jeff_c_cornwell_team_telstra_com/Documents/Microsoft%20Copilot%20Chat%20Files/LedMatrix.cpp)
+  }
 }

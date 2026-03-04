@@ -27,7 +27,7 @@
 */
 
 #ifndef DEBUG_TIMING_STREAM
-  #define DEBUG_TIMING_STREAM 0
+  #define DEBUG_TIMING_STREAM 1
 #endif
 #ifndef DEBUG_TIMING_VERBOSE
   #define DEBUG_TIMING_VERBOSE 0
@@ -43,23 +43,23 @@ namespace {
   // ------------------------------------------------------------
   // Your tuned thresholds (µs)
   // ------------------------------------------------------------
-  // Folder 4:  0..30
+  // Folder 4:  0..44
   // Gap:       (30,36)
-  // Folder 3: 36..44
+  // Folder 3: 52..60
   // Gap:      (44,60)
-  // Folder 2: 60..84
+  // Folder 2: 68..84
   // Gap:      (84,100)
-  // Folder 1: >=100
+  // Folder 1: >=96
   const uint32_t FOLDER4_LOWER_US = 0;
-  const uint32_t FOLDER4_UPPER_US = 44;
+  const uint32_t FOLDER4_UPPER_US = 52;
 
-  const uint32_t FOLDER3_LOWER_US = 52;
-  const uint32_t FOLDER3_UPPER_US = 60;
+  const uint32_t FOLDER3_LOWER_US = 60;
+  const uint32_t FOLDER3_UPPER_US = 76;
 
-  const uint32_t FOLDER2_LOWER_US = 68;
-  const uint32_t FOLDER2_UPPER_US = 84;
+  const uint32_t FOLDER2_LOWER_US = 96;
+  const uint32_t FOLDER2_UPPER_US = 140;
 
-  const uint32_t FOLDER1_LOWER_US = 96;
+  const uint32_t FOLDER1_LOWER_US = 172;
 
   // Stability requirements
   const uint8_t STABLE_COUNT_FOLDER = 4;
