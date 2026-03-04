@@ -1,3 +1,4 @@
+
 name: Mirror to Public Repo
 
 on:
@@ -9,6 +10,7 @@ on:
 jobs:
   mirror:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout source repo
         uses: actions/checkout@v4
@@ -16,7 +18,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Push all branches and tags to public mirror
+      - name: Push main branch to public mirror
         env:
           MIRROR_PAT: ${{ secrets.MIRROR_PAT }}
         run: |
@@ -25,4 +27,4 @@ jobs:
 
           git remote add mirror https://x-access-token:${MIRROR_PAT}@github.com/jcobris/Vintage-Radio-1-public.git
 
-          git push --prune mirror +refs/heads/*:refs/heads/* +refs/tags/*:refs/tags/*
+          git push mirror main
