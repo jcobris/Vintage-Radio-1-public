@@ -5,35 +5,34 @@
 #include <SoftwareSerial.h>
 
 /*
-  ============================================================
-  DY-SV5W UART Protocol Notes
-  ============================================================
+ ============================================================
+ DY-SV5W UART Protocol Notes
+ ============================================================
+ Commands are sent as byte frames beginning with 0xAA.
+ Many commands are fixed frames; volume/EQ commands use a checksum.
 
-  Commands are sent as byte frames beginning with 0xAA.
-  Many commands are fixed frames; volume/EQ commands use a checksum.
+ Timing / stability:
+ - SoftwareSerial can contribute to timing jitter elsewhere.
+ - This module avoids frequent bursts by doing work only when the desired
+   folder changes (checked at 500ms cadence).
+ - Delays after writes provide the module time to process commands.
 
-  Timing / stability:
-  - SoftwareSerial can contribute to timing jitter elsewhere.
-  - This module avoids frequent bursts by doing work only when the desired
-    folder changes (checked at 500ms cadence).
-  - Delays after writes provide the module time to process commands.
-
-  Audio "gap" behaviour:
-  - desired=99 => volume set to 0 (mute)
-  - leaving 99 => volume restored BEFORE play
+ Audio "gap" behaviour:
+ - desired=99 => volume set to 0 (mute)
+ - leaving 99 => volume restored BEFORE play
 */
 
 static SoftwareSerial mp3Serial(Config::PIN_MP3_RX, Config::PIN_MP3_TX);
 
 // Debug controls (event prints are gated by DEBUG via MP3_DEBUG_EVENTS)
 #ifndef MP3_DEBUG_EVENTS
-  #define MP3_DEBUG_EVENTS (DEBUG == 1 ? 1 : 0)
+ #define MP3_DEBUG_EVENTS (DEBUG == 1 ? 1 : 0)
 #endif
 #ifndef MP3_DEBUG_FRAMES
-  #define MP3_DEBUG_FRAMES 0
+ #define MP3_DEBUG_FRAMES 0
 #endif
 #ifndef MP3_DEBUG_RX
-  #define MP3_DEBUG_RX 0
+ #define MP3_DEBUG_RX 0
 #endif
 
 #define MP3_ONLINE_TIMEOUT_MS 5000UL
@@ -57,13 +56,16 @@ static bool s_mp3Online = false;
 static bool s_isMuted = false;
 
 // Commands
-static const byte CMD_CHECK_ONLINE[] = {0xAA, 0x09, 0x00, 0xB3};
-static const byte CMD_VOL_MUTE[]     = {0xAA, 0x13, 0x01, 0x00, 0xBE}; // volume=0
-static const byte CMD_SET_SD[]       = {0xAA, 0x0B, 0x01, 0x01, 0xB7};
-static const byte CMD_NEXT_FOLDER[]  = {0xAA, 0x0F, 0x00, 0xB9};
-static const byte CMD_PREV_FOLDER[]  = {0xAA, 0x0E, 0x00, 0xB8};
-static const byte CMD_PLAY_RANDOM_IN_FOLDER[] = {0xAA, 0x18, 0x01, 0x05, 0xC8};
-static const byte CMD_PLAY[] = {0xAA, 0x02, 0x00, 0xAC};
+static const byte CMD_CHECK_ONLINE[]            = {0xAA, 0x09, 0x00, 0xB3};
+static const byte CMD_VOL_MUTE[]                = {0xAA, 0x13, 0x01, 0x00, 0xBE}; // volume=0
+static const byte CMD_SET_SD[]                  = {0xAA, 0x0B, 0x01, 0x01, 0xB7};
+static const byte CMD_NEXT_FOLDER[]             = {0xAA, 0x0F, 0x00, 0xB9};
+static const byte CMD_PREV_FOLDER[]             = {0xAA, 0x0E, 0x00, 0xB8};
+static const byte CMD_PLAY_RANDOM_IN_FOLDER[]   = {0xAA, 0x18, 0x01, 0x05, 0xC8};
+static const byte CMD_PLAY[]                    = {0xAA, 0x02, 0x00, 0xAC};
+
+// Next track ("Next music") command: AA 06 00 B0
+static const byte CMD_NEXT_TRACK[]              = {0xAA, 0x06, 0x00, 0xB0};
 
 static void logTxFrame(const byte *cmd, int len) {
 #if MP3_DEBUG_FRAMES == 1
@@ -138,6 +140,7 @@ static void syncFolderTo(int targetFolder /*1..4*/) {
       mp3Folder--;
     }
   }
+
 #if MP3_DEBUG_EVENTS == 1
   Serial.print(F("MP3: Folder synced to "));
   Serial.println(mp3Folder);
@@ -156,6 +159,7 @@ static void initialSetup() {
 
   sendCommand(CMD_PLAY_RANDOM_IN_FOLDER, sizeof(CMD_PLAY_RANDOM_IN_FOLDER));
   delay(50);
+
   sendCommand(CMD_PLAY, sizeof(CMD_PLAY));
   delay(100);
 
@@ -164,11 +168,9 @@ static void initialSetup() {
 
 static bool checkMP3OnlineWithTimeout(unsigned long timeoutMs) {
   const unsigned long start = millis();
-
   while (millis() - start < timeoutMs) {
     sendCommand(CMD_CHECK_ONLINE, sizeof(CMD_CHECK_ONLINE));
     delay(250);
-
     if (mp3Serial.available()) {
       while (mp3Serial.available()) (void)mp3Serial.read();
 #if MP3_DEBUG_EVENTS == 1
@@ -177,7 +179,6 @@ static bool checkMP3OnlineWithTimeout(unsigned long timeoutMs) {
       return true;
     }
   }
-
 #if MP3_DEBUG_EVENTS == 1
   Serial.println(F("MP3: Offline (timeout)"));
 #endif
@@ -218,6 +219,16 @@ void MP3::init() {
   initialSetup();
 }
 
+void MP3::nextTrack() {
+  if (!s_mp3Online) return;
+
+  sendCommand(CMD_NEXT_TRACK, sizeof(CMD_NEXT_TRACK));
+
+#if MP3_DEBUG_EVENTS == 1
+  Serial.println(F("MP3: Next track"));
+#endif
+}
+
 void MP3::tick() {
   if (!s_mp3Online) return;
 
@@ -236,7 +247,6 @@ void MP3::tick() {
   // Act only every 500ms to reduce command traffic
   if (millis() - lastCheck >= 500) {
     lastCheck = millis();
-
     const uint8_t desired = s_desiredFolder;
 
     // Detect folder change

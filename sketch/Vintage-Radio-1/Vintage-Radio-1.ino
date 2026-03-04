@@ -68,6 +68,12 @@ static const uint16_t TUNE_POLL_MS = 120;
 
 static BluetoothModule g_bt(Config::PIN_BT_RX, Config::PIN_BT_TX);
 
+// Next-track button debounce state (D13, active-low)
+static const uint16_t NEXT_BTN_DEBOUNCE_MS = 30;
+static uint8_t  g_nextBtnRaw = HIGH;
+static uint8_t  g_nextBtnStable = HIGH;
+static uint32_t g_nextBtnLastChangeMs = 0;
+
 // ============================================================
 // Helpers
 // ============================================================
@@ -98,6 +104,11 @@ void setup() {
   pinMode(Config::PIN_DISPLAY_MODE_NORMAL, INPUT_PULLUP);
   pinMode(Config::PIN_DISPLAY_MODE_ALT,    INPUT_PULLUP);
   pinMode(Config::PIN_DISPLAY_MODE_OFF,    INPUT_PULLUP);
+
+  pinMode(Config::PIN_NEXT_TRACK_BUTTON, INPUT_PULLUP);
+  g_nextBtnRaw = digitalRead(Config::PIN_NEXT_TRACK_BUTTON);
+  g_nextBtnStable = g_nextBtnRaw;
+  g_nextBtnLastChangeMs = millis();
 
   LedMatrix::begin();
   DisplayLED::begin(Config::PIN_LED_DISPLAY);
@@ -162,6 +173,25 @@ void loop() {
   }
 
   // ----------------------------------------------------------
+  // Next-track button (D13, active-low) - debounced, edge-triggered
+  // Only active when MP3 source is selected.
+  // ----------------------------------------------------------
+  const uint8_t btn = digitalRead(Config::PIN_NEXT_TRACK_BUTTON);
+  if (btn != g_nextBtnRaw) {
+    g_nextBtnRaw = btn;
+    g_nextBtnLastChangeMs = now;
+  }
+  if ((now - g_nextBtnLastChangeMs) >= NEXT_BTN_DEBOUNCE_MS && g_nextBtnStable != g_nextBtnRaw) {
+    g_nextBtnStable = g_nextBtnRaw;
+    if (g_nextBtnStable == LOW) {
+      if (g_sourceMode == SOURCE_MP3) {
+        MP3::nextTrack();
+        debugln(F("MP3: Next track (button)"));
+      }
+    }
+  }
+
+  // ----------------------------------------------------------
   // Folder selection
   // ----------------------------------------------------------
   if (g_sourceMode == SOURCE_MP3) {
@@ -208,4 +238,3 @@ void loop() {
   // ----------------------------------------------------------
   LedMatrix::update(g_folder, lightsOn);
 }
-
