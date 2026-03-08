@@ -1,60 +1,117 @@
-We’re continuing my Vintage Radio project. Work one step at a time.
 
-Public mirror repo: https://github.com/jcobris/Vintage-Radio-1-public
-Please read:
-- ASSISTANT_START_HERE.md
-- PROJECT_STATE.md
-- docs/REQUIREMENTS.md
-- docs/ARCHITECTURE.md
-- docs/PINOUT.md
-- docs/README.md
+# Vintage Radio Retrofit — Conversation Restart Prompt
 
-Current sketch: sketch/Vintage-Radio-1.ino
-Today’s goal: 
+We are continuing work on my **Vintage Radio Retrofit** project.
 
-Hi Copilot — we’re continuing my Vintage Radio Arduino Nano retrofit.
-Work one step at a time. Don’t redesign everything; keep behaviour close to what works.
-Repo + files
-Public mirror repo: https://github.com/jcobris/Vintage-Radio-1-public
-Please read:
+This is an Arduino-based hardware/software project that is already **working and stable**.
+The goal of these conversations is to incrementally improve, document, or refine the system
+without breaking existing behaviour.
 
-ASSISTANT_START_HERE.md
-PROJECT_STATE.md
-docs/REQUIREMENTS.md
-docs/ARCHITECTURE.md
-docs/PINOUT.md
-docs/README.md
+I will paste all relevant source files and documentation into the conversation.
+Do NOT attempt to browse GitHub or access external repositories.
+Work only from what I provide in the chat.
 
-Current sketch + modules are already integrated and stable:
+---
 
-Arduino Nano (ATmega328P)
-Serial debug 115200 set only once in main .ino
-MP3 DY-SV5W on SoftwareSerial: D12 RX, D11 TX, 9600
-Bluetooth BT201 on SoftwareSerial: D10 RX, D9 TX, 57600 (UART slept unless passthrough)
-Source detect on D2: LOW=MP3, HIGH=Bluetooth (INPUT_PULLUP)
-Display mode switch to GND: D3 NORMAL, D4 ALT (same for now), D5 MATRIX_OFF
-Matrix data D7, Tuner LED string D6
-Folder numbering standard: 1..4, 99 = gap, 255 = fault; treat 255 as 99 before calling MP3
+## Project Overview (Context)
 
+- **Owner:** Jeff Cornwell
+- **Target MCU:** Arduino Nano (ATmega328P)
+- **IDE:** Arduino IDE
+- **Status:** Fully functional, long‑running stable build
 
+### Core Features
+- Bluetooth audio playback (BT210 module)
+- MP3 playback from SD card (DY‑SV5W module)
+- Physical audio source selection (2‑pole switch)
+- Source detection via digital input
+- MP3 folder selection via tuning capacitor timing (RC measurement)
+- WS2812B 8×32 LED matrix with themed animations
+- PWM dial/tuner LED strip
+- Additional WS2812B LED strip
+- 3‑position display mode switch
+- MP3 next‑track pushbutton
 
-Hardware under test
+---
 
-None
+## Hardware Summary (Fixed / Verified)
 
-Current state + constraints
+- **Bluetooth (BT210):**
+  - SoftwareSerial @ 57600
+  - Pins: D9 (TX), D10 (RX)
+- **MP3 (DY‑SV5W):**
+  - SoftwareSerial @ 9600
+  - Pins: D11 (TX), D12 (RX)
+- **Source detect:** D2 (LOW = MP3, HIGH = Bluetooth, INPUT_PULLUP)
+- **Display mode switch:**  
+  - D3 = Normal  
+  - D4 = Reserved (future)  
+  - D5 = Matrix OFF, dial solid ON
+- **Tuning input:** D8 (RC timing)
+- **Next‑track button:** D13 (active‑low)
+- **LED matrix:** D7 (WS2812B 8×32)
+- **Dial/tuner LED strip:** D6 (PWM)
+- **Additional LED strip:** A0 (WS2812B)
 
-Code is stable and runs long-term (memory headroom improved); avoid reintroducing String or heap churn.
-Debug should be predictable: boot messages, mode changes, folder changes.
-Avoid spam unless behind explicit debug flags.
-If you change files: return full replacement contents for each changed file.
-If you need a new file: provide full content and exact path.
+Pin conflicts are enforced via compile‑time guardrails in `Config.h`.
 
+---
 
+## Software & Coding Constraints (IMPORTANT)
 
+- Arduino Nano memory is limited
+- Avoid `String` and dynamic allocation
+- Prefer compile‑time configuration
+- Debug output must be:
+  - Predictable
+  - Compile‑time controlled
+  - Silent by default
+- Serial debug baud: **115200**
+- Serial is initialised **once** in the main `.ino`
+- Only one SoftwareSerial should be active/listening at a time
 
+---
 
-First task for you (Step 1 only)
-My GitHub files are out dated. I have since added a 'next track' button and also an additional LED strip. The project is currently fully functional however I will want to update the LED Matrix patterns and the LED Strip pattern.
-I have pasted my sketch files. First task is to review the debug code to make sure it's good for final code. Provide any suggestions. It would be good if I can turn on/off debugging globally (which is already coded) but also enable/disable specific function debuging within the various function files.
-Step 2 will be to review and update all the github files to reflect current project status and changes.
+## Working Style & Expectations
+
+- **One step at a time**
+- Do NOT redesign the entire project unless explicitly requested
+- Keep behaviour as close as possible to what already works
+- If changes are suggested:
+  - Explain *why*
+  - Keep them minimal
+- If files are changed:
+  - Return **FULL replacement contents**
+  - Specify exact file paths
+- If a new file is needed:
+  - Provide full content
+  - State where it should live
+
+Do not include AI‑specific instructions or meta commentary in project files
+unless explicitly asked.
+
+---
+
+## Debug Philosophy
+
+- Global debug master switch exists (`DEBUG`)
+- Individual subsystems have explicit compile‑time toggles
+- Debug should be useful for:
+  - Boot
+  - Mode changes
+  - Folder changes
+  - MP3 command flow
+- Avoid spam unless explicitly enabled
+
+---
+
+## CURRENT TASK (Update This Section Each Time)
+
+> Describe the specific task you want to work on *in this session*.
+> Examples:
+> - Refine LED matrix animations for eerie theme
+> - Reduce PWM noise on dial LEDs
+> - Update documentation to reflect wiring changes
+> - Review a specific module for cleanup
+
+**Current task:**

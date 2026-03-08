@@ -1,77 +1,123 @@
 
-# Tuner Calibration (RC Timing → Folder Selection)
+# Tuner Calibration — RC Timing → Folder Selection
 
-This project uses an RC timing measurement on the tuning-capacitor mechanism to select an MP3 folder.
-The logic lives in:
+This project uses an **RC timing measurement** on the vintage radio tuning capacitor
+to select an MP3 folder (1–4).  
+The intent is to preserve the original tuning knob while mapping its electrical
+position to discrete digital “stations”.
 
-- `sketch/Vintage-Radio-1/Radio_Tuning.cpp`
-- `sketch/Vintage-Radio-1/Radio_Tuning.h`
+---
 
-## What is being measured?
+## Where the Logic Lives
 
-Each “sample” measures how long the RC node stays LOW after being released to INPUT (no pullups):
+Calibration and classification logic is implemented in:
 
-1. Drive tuning pin LOW as OUTPUT for `DISCHARGE_MS` to discharge the capacitor.
-2. Switch pin to INPUT (no pullups).
-3. Time until `digitalRead()` becomes HIGH.
-4. Repeat 3 times and take the **median** (reduces noise).
+- `Radio_Tuning.cpp`
+- `Radio_Tuning.h`
 
-Key parameters (current values in code):
+This document describes **what the code currently does**, not historical or experimental values.
 
-- `DISCHARGE_MS = 10` ms
-- `TIMEOUT_US   = 2,000,000` µs (2s safety timeout)
-- Median-of-3 with `delay(2)` between samples
+---
 
-If timeout occurs, the code treats the measurement as **FAULT** (`t_us == 0`).
+## Measurement Method (RC Timing)
 
-## Folder buckets (µs)
+Each tuning poll performs the following steps:
 
-The tuner is classified into one of these buckets based on the measured `t_us`:
+1. Configure the tuning pin as `OUTPUT`, drive **LOW**
+2. Hold LOW for **10 ms** to fully discharge the capacitor
+3. Switch the pin to `INPUT` (no pull‑ups)
+4. Measure the time (µs) until the pin reads **HIGH**
+5. Repeat the measurement **3 times**
+6. Take the **median** of the three samples
 
-| Bucket | Meaning   | Range (µs) |
-|--------|-----------|------------|
-| `03`   | folder 3  | 0 → 30     |
-| `99`   | dead-gap  | 31 → 40    |
-| `02`   | folder 2  | 41 → 51    |
-| `99`   | dead-gap  | 52 → 64    |
-| `01`   | folder 1  | 65 → 89    |
-| `99`   | dead-gap  | 90 → 122   |
-| `00`   | folder 0  | >= 123     |
+This approach:
+- Rejects single‑sample noise
+- Avoids floating‑point math
+- Is stable on the Arduino Nano
 
-Current constants:
+---
 
-- `F03_LOWER_US = 0`
-- `F03_UPPER_US = 30`
+## Timing Constants (Current)
 
-- `F02_LOWER_US = 41`
-- `F02_UPPER_US = 51`
+| Parameter | Value |
+|---------|------|
+| Discharge time | **10 ms** |
+| Timeout | **2,000,000 µs (2 s)** |
+| Samples per poll | **3 (median‑of‑three)** |
+| Inter‑sample delay | **2 ms** |
 
-- `F01_LOWER_US = 65`
-- `F01_UPPER_US = 89`
+If **any sample times out**, the entire poll is treated as a **FAULT**.
 
-- `F00_LOWER_US = 123`  (no upper bound)
+---
 
-The “dead gaps” are intentional hysteresis zones between bands.
+## Folder Classification (Latest Figures)
 
-## Stability / hysteresis (anti-flicker)
+Measured time (`t_us`) is mapped to a folder or gap as follows:
 
-The code does not instantly switch folders. It requires consecutive hits of the same bucket:
+| Measured time (µs) | Result |
+|-------------------|--------|
+| **0 – 52** | Folder **4** |
+| **>52 – <60** | Gap |
+| **60 – 76** | Folder **3** |
+| **>76 – <96** | Gap |
+| **96 – 140** | Folder **2** |
+| **>140 – <172** | Gap |
+| **≥172** | Folder **1** |
 
-- `STABLE_COUNT_FOLDER = 4` for buckets `00/01/02/03`
-- `STABLE_COUNT_GAP    = 4` for bucket `99`
+### Special values
+- **99** → Gap / between stations
+- **255** → Fault (timeout or invalid measurement)
+
+Faults are treated the same as gaps by the rest of the system.
+
+---
+
+## Stability / Anti‑Flicker Logic
+
+The system does **not** switch folders immediately.
+
+Each classified result must repeat consecutively before it is committed:
+
+| Class | Required consecutive hits |
+|-----|---------------------------|
+| Folder (1–4) | **4** |
+| Gap (99) | **8** |
+| Fault (255) | Immediate |
 
 Internal state:
+- `pendingClass` — candidate folder/gap
+- `pendingHits` — consecutive matches
+- `currentFolder` — committed, stable value
 
-- `pendingClass` tracks the current candidate bucket
-- `pendingHits` counts consecutive matches
-- `currentFolder` only changes once `pendingHits >= need`
+This prevents chatter when the tuning knob rests near a boundary.
 
-This prevents jitter when the tuning knob sits near a boundary.
+---
 
-## Debug output (calibration mode)
+## Runtime Outputs
 
-Two compile-time flags control serial output:
+Two values are always maintained internally:
 
-### 1) Streaming timing output (recommended while calibrating)
+| Value | Meaning |
+|-----|--------|
+| `currentFolder` | Stable, committed folder used by MP3 + display |
+| `lastInstantClass` | Immediate classification (used for visuals) |
+
+This allows:
+- Stable audio playback
+- Responsive “between stations” visual effects
+
+---
+
+## Debug Output (Calibration & Diagnostics)
+
+Debug output is **compile‑time controlled** in `Config.h`.
+
+### Relevant flags
+
 ```c
-#define DEBUG_TIMING_STREAM 1
+#define DEBUG 1
+
+#define TUNING_DEBUG          1   // folder commit events
+#define TUNING_STREAM_DEBUG  0   // continuous timing output (very noisy)
+#define TUNING_VERBOSE_DEBUG 0   // raw samples and hit counts
+

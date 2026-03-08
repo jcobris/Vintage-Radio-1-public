@@ -89,164 +89,257 @@ When `DISPLAY_NORMAL`:
 - Expose `folder`
 - Detect folder change events
 
-**Notes / Risks**
+# Vintage Radio Retrofit — Architecture
 
-
-**Calibration**
-- Store thresholds in `config.h`:
-  - `T_F1_MAX`, `T_F2_MAX`, `T_F3_MAX`, else folder 4
-- Consider smoothing:
-  - sample multiple readings; take median/average; add hysteresis to avoid chatter.
-
-### 3.3 Mp3Controller (DY-SV5W)
-**Responsibilities**
-- Maintain current folder state for the MP3 module
-- Provide method: `requestFolder(folder)`
-- Implement the command sequence on folder change:
-
-Sequence:
-1) mute volume
-2) next/prev folder commands until desired folder reached
-3) random-in-folder command
-4) play command
-5) volume max command
-
-**Timing**
-- Inter-command gaps likely required; avoid long blocking delays.
-- Implement as a small state machine / command queue so loop remains responsive.
-
-**Assumptions**
-- “Random in folder” starts at Track 1, and each folder contains a blank Track 1.
-
-### 3.4 BtController (BT210)
-**Responsibilities**
-- Optional initial configuration routine (for module replacement scenarios)
-- Not required for normal runtime operation (settings persist in module)
-- Module may emit 2 messages on pause/play, but no continuous chatter.
-
-**Serial Strategy (important)**
-- During normal runtime, do not rely on BT serial reception.
-- If BT setup is performed, do it:
-  - at boot before starting heavy LED animations, OR
-  - in a user-triggered “BT config mode” (future option).
-
-### 3.5 DisplayController (Matrix + Dial PWM)
-Split into two layers:
-
-#### A) ThemeManager
-**Responsibilities**
-- Determine current `theme` from `displayMode`, `sourceMode`, `folder`
-- Detect theme changes and reset pattern state when theme changes
-
-#### B) MatrixRenderer
-**Responsibilities**
-- Drive WS2812B 8x32 on D7
-- Render animations non-blocking via `tick(nowMs)` pattern updates
-- Enforce rule: **single color per 8-LED column**
-
-**Patterns**
-- PARTY: rainbow marble style animation (continuous)
-- FIRE: fire simulation (column-based)
-- XMAS: half red/green pulsing
-- EERIE: slow green/blue pulse
-
-#### C) DialLightController
-**Responsibilities**
-- Drive analog dial strip via PWM on D6
-- Behaviors:
-  - DISPLAY_OFF: solid ON
-  - THEME_EERIE: breathing/pulse synced to matrix pulse phase
-  - Other themes: fixed brightness (TBD)
+**Owner:** Jeff Cornwell  
+**Status:** Current / Accurate  
+**Target MCU:** Arduino Nano (ATmega328P)
 
 ---
 
-## 4. Main Loop Scheduling (Non-Blocking)
+## 1. Architectural Intent
 
-### 4.1 Proposed Loop Outline
+This project is intentionally simple and deterministic.
 
-1) `InputManager.update(now)`
-2) `FolderSelector.update(now)` (if MP3 selected or always — TBD)
-3) Compute `effectiveTheme` from current state
-4) If folder changed and MP3 is selected:
-   - `Mp3Controller.requestFolder(newFolder)`
-5) `Mp3Controller.update(now)` (runs queued commands)
-6) `DisplayController.update(now)`:
-   - If DISPLAY_OFF: matrix off, dial solid on
-   - Else: `MatrixRenderer.tick(now)` and `DialLightController.tick(now)`
+Primary goals:
 
-### 4.2 Timing Budgets (initial targets)
-- Input scan: every loop
-- Folder timing measure: <= every 50–100ms (TBD)
-- Matrix tick: ~20–50 FPS equivalent (every 20–50ms)
-- MP3 command steps: spread over time; do not block > ~10ms chunks
+1. **Stability on Arduino Nano**
+   - No dynamic allocation
+   - No `String`
+   - Predictable timing
+   - Long‑running stability
 
----
+2. **Preserve physical control behaviour**
+   - Audio switching is physical
+   - Firmware reacts to hardware state
+   - No “soft” overrides of user intent
 
-## 5. Serial / Resource Considerations (Nano)
+3. **Non‑blocking main loop**
+   - No long delays in `loop()`
+   - All time‑sensitive work spread over iterations
 
-### 5.1 Two SoftwareSerial Devices
-- MP3 module uses SoftSerial pins (12,11) at 9600.
-- BT module uses SoftSerial pins (9,10); setup-only; avoid runtime reception.
+4. **Minimal abstraction**
+   - One main `.ino`
+   - Hardware‑focused modules
+   - No background schedulers or RTOS concepts
 
-**Rule**
-- Only one SoftwareSerial should be “listening” at a time.
-- Prefer not to listen to BT during normal operation.
-
-### 5.2 WS2812 and Interrupt Sensitivity
-- WS2812 updates may disable interrupts briefly.
-- This can corrupt SoftwareSerial reception if receiving during LED updates.
-- Mitigation:
-  - avoid relying on BT reception
-  - keep MP3 receive use minimal (prefer command-only)
-  - if any receive is required, time it outside LED update windows (advanced; likely unnecessary)
+This document reflects **what the system does today**, not future ideas.
 
 ---
 
-## 6. File/Code Organization (Arduino IDE-friendly)
+## 2. High‑Level Structure
 
-Suggested sketch folder layout:
+The firmware consists of:
 
-VintageRadioFinal/
-- VintageRadioFinal.ino  (setup/loop; orchestration)
-- config.h               (pin defs, thresholds, tunables)
-- InputManager.h/.cpp
-- FolderSelector.h/.cpp
-- Mp3Controller.h/.cpp
-- BtController.h/.cpp    (optional; setup routine)
-- DisplayController.h/.cpp
-- MatrixRenderer.h/.cpp
-- DialLightController.h/.cpp
-- Patterns_*.h/.cpp      (Party/Fire/Xmas/Eerie)
+- One **orchestrating sketch** (`.ino`)
+- Several **single‑responsibility modules**
 
----
+Inputs ──▶ Main .ino ──▶ Outputs
+│
+├─ Radio_Tuning
+├─ MP3
+├─ Bluetooth
+├─ LedMatrix
+├─ LedStrip
+└─ DisplayLED
 
-## 7. Configuration (config.h)
-
-Include:
-- Pin assignments (D8, D2, D3/4/5, D6, D7, SoftSerial pins)
-- Debounce/stability times
-- Folder timing thresholds (calibrated)
-- Dial brightness values (normal, solid override)
-- MP3 volume values (mute/max)
-- Theme tick rates / animation parameters
+There is no asynchronous processing.
+Everything is driven directly from `loop()`.
 
 ---
 
-## 8. Acceptance Hooks (for testing)
-Provide compile-time or runtime debug flags:
-- `#define DEBUG_SERIAL 1`
-- `#define DEBUG_FOLDER 1`
-- `#define DEBUG_MP3 1`
+## 3. Inputs
 
-When enabled, print:
-- sourceMode, displayMode, folder, theme changes
-- MP3 command steps
-- capacitor timing readings (for calibration)
+All inputs are read synchronously in the main loop.
+
+| Pin | Purpose |
+|---|---|
+| D2 | Source detect (MP3 / Bluetooth) |
+| D3 | Display mode: Normal |
+| D4 | Display mode: Reserved |
+| D5 | Display mode: Matrix OFF |
+| D8 | Tuning capacitor timing input |
+| D13 | MP3 next‑track button |
 
 ---
 
-## 9. Future Extension Points
-- DISPLAY_RESERVED (D4): add alternative theme sets later
-- ESP32 migration path if Nano resources are exceeded:
-  - move to hardware UARTs for modules
-  - higher animation complexity possible
+## 4. Tracked State (Main `.ino`)
+
+The main sketch maintains:
+
+- `sourceMode`
+  - `SOURCE_MP3`
+  - `SOURCE_BT`
+- `displayMode`
+  - `DISPLAY_NORMAL`
+  - `DISPLAY_ALT` (reserved)
+  - `DISPLAY_OFF`
+- `folder`
+  - `1..4` valid
+  - `99` gap
+- Button debounce state
+- Timing state (poll intervals)
+
+All state transitions are **edge‑detected** by comparing current vs previous values.
+
+---
+
+## 5. Display Priority Model
+
+Display behaviour follows a strict priority order.
+
+### Priority 1 — Display OFF (D5)
+- LED matrix OFF
+- Dial/tuner LED forced solid ON
+- No matrix animation updates occur
+
+### Priority 2 — Normal Display (D3)
+- Matrix + dial LEDs active
+- Behaviour depends on source and folder
+
+### Priority 3 — Reserved (D4)
+- Currently behaves the same as normal
+- Placeholder for future expansion
+- Must not alter existing behaviour
+
+---
+
+## 6. Source‑Dependent Behaviour
+
+### 6.1 Bluetooth Selected (D2 HIGH)
+
+- MP3 subsystem idle
+- Bluetooth module awake if required
+- LED matrix runs **Party / Rainbow** theme continuously
+- Folder selection ignored
+- Dial LED at normal solid brightness
+
+---
+
+### 6.2 MP3 Selected (D2 LOW)
+
+- Tuning capacitor selects folder
+- MP3 module follows folder selection
+- Display theme depends on folder:
+
+| Folder | Meaning | Theme |
+|---|---|---|
+| 1 | Valid | Party |
+| 2 | Valid | Fire |
+| 3 | Valid | Christmas |
+| 4 | Valid | Eerie |
+| 99 | Gap | Between‑stations flicker |
+| 255 | Fault | Treated as gap |
+
+---
+
+## 7. Module Responsibilities
+
+### 7.1 `Radio_Tuning`
+
+- Measures RC timing on D8
+- Median‑of‑three sampling
+- Maps timing to folder / gap / fault
+- Applies stability (anti‑flicker) logic
+- Exposes:
+  - Committed folder
+  - Instant classification (visual use)
+
+The main sketch consumes **only the committed folder**.
+
+---
+
+### 7.2 `MP3`
+
+- Controls DY‑SV5W via UART
+- Executes folder‑change sequence:
+  1. Mute
+  2. Navigate folders
+  3. Random‑in‑folder
+  4. Play
+  5. Restore volume
+- Handles next‑track command
+
+The MP3 module acts only on **changes**.
+
+---
+
+### 7.3 `Bluetooth`
+
+- Performs optional AT‑command setup
+- UART passthrough only when explicitly enabled
+- Normally asleep during runtime
+
+Bluetooth serial reception is not required for normal operation.
+
+---
+
+### 7.4 `LedMatrix`
+
+- Drives WS2812B 8×32 matrix
+- Renders non‑blocking animations
+- Enforces “one colour per 8‑LED column” rule
+- Calls `FastLED.show()`
+
+Matrix updates are **skipped during RC timing polls**
+to avoid interrupt interference.
+
+---
+
+### 7.5 `LedStrip`
+
+- Drives additional WS2812B strip
+- Generates pattern data only
+- Never calls `FastLED.show()`
+
+Actual output occurs when the matrix updates.
+
+---
+
+### 7.6 `DisplayLED`
+
+- Drives analog dial/tuner LEDs via PWM
+- Provides:
+  - Solid brightness
+  - Random flicker
+  - Sine‑based pulse
+
+Used heavily for:
+- Between‑stations feedback
+- Eerie theme synchronisation
+
+---
+
+## 8. Main Loop Execution Order
+
+Each `loop()` iteration follows this sequence:
+
+1. Read display mode switch
+2. Read source detect
+3. Handle next‑track button
+4. Poll tuning capacitor (timed)
+5. Update MP3 subsystem
+6. Update dial LED
+7. Update LED strip
+8. Update LED matrix (if safe)
+
+RC timing polls deliberately skip LED updates for that iteration.
+
+---
+
+## 9. Serial & Debug Strategy
+
+- Serial initialised once in `.ino`
+- Debug is compile‑time controlled
+- Subsystem‑specific toggles
+- No runtime overhead when disabled
+
+---
+
+## 10. Constraints
+
+- Arduino Nano resources are sufficient
+- No dynamic memory
+- One SoftwareSerial active at a time
+- WS2812 timing respected
+- Physical controls are authoritative

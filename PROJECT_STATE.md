@@ -1,112 +1,89 @@
+
 # Project State — Vintage Radio Retrofit
 
 **Owner:** Jeff Cornwell  
-**Working style:** One step at a time (no big-bang merges)
+**Status:** Stable / Active  
+**Target MCU:** Arduino Nano (ATmega328P)
 
 ---
 
-## Repositories (IMPORTANT)
+## Current State (Summary)
 
-### Source of Truth (Private)
-- **Private repo:** `jcobris/Vintage-Radio-1`
-- This is the authoritative repo where development happens.
+The project is fully functional and stable in its current form.
 
-### Public Mirror (Reference for AI / Sharing)
-- **Public repo:** https://github.com/jcobris/Vintage-Radio-1-public
-- This is a mirrored copy that updates automatically from the private repo.
-- Use this public repo link in future conversations so the assistant can browse files directly.
+All core systems are working:
+- Bluetooth audio playback
+- MP3 playback with folder selection via tuning capacitor timing
+- LED matrix animations
+- Dial/tuner LED illumination
+- Display mode override switch
+- Next‑track button for MP3
 
-### Mirror Automation
-- Mirroring is performed by a GitHub Actions workflow in the **private** repo:
-  - `.github/workflows/mirror-to-public.yml`
-- The workflow pushes all branches/tags to the public repo.
-- It uses a repo secret in the private repo:
-  - Secret name: `MIRROR_PAT` (classic PAT with `workflow` + repo write capability)
-- Note: The public mirror contains workflows too (by design).
+This phase of work focused on:
+- Finalising debug behaviour (compile‑time, predictable, non‑spammy)
+- Locking in pin usage with compile‑time guardrails
+- Preparing documentation for future visual/animation refinement
 
 ---
 
-## Current Build Target
-- **IDE:** Arduino IDE
-- **Primary board:** Arduino Nano (ATmega328P)
-- **Fallback:** ESP32 if Nano resources become insufficient
+## Hardware Configuration (Verified)
 
----
-
-## Hardware Summary (Verified)
-
-### Audio / Source Sense
-- Audio source selection is **physical** (2-pole switch routes audio to preamp).
-- Firmware only *detects* which source is selected for display logic:
-  - **D2 LOW = MP3 selected**
-  - **D2 HIGH = Bluetooth selected**
-
-### Modules (UART)
-- **MP3 module:** DY-SV5W @ 9600 baud  
-  - SoftwareSerial pins: (12,11)
+### Audio Sources
 - **Bluetooth module:** BT210  
-  - SoftwareSerial pins: (9,10)
-  - Setup-only; retains config on reboot
-  - Emits 2 messages on pause/play; no continuous chatter expected/required
+  - SoftwareSerial @ 57600 baud  
+  - Pins: D9 (TX), D10 (RX)
+- **MP3 module:** DY‑SV5W  
+  - SoftwareSerial @ 9600 baud  
+  - Pins: D11 (TX), D12 (RX)
 
-### LEDs
-- **Matrix:** WS2812B 8x32 on **D7**
-- **Dial/Tuner lights:** Analog PWM on **D6**
+Audio switching is **physical** via a 2‑pole selector.  
+Firmware only *detects* the selected source.
 
-### Display Mode Switch (3-position)
-- **D3:** Normal themes enabled
-- **D4:** Reserved for future themes (currently no behaviour)
-- **D5:** Matrix OFF, tuner lights solid ON
+### Inputs
+- **D2:** Source detect  
+  - LOW = MP3  
+  - HIGH = Bluetooth (INPUT_PULLUP)
+- **D3 / D4 / D5:** Display mode switch  
+  - D3 = Normal  
+  - D4 = Reserved (future use)  
+  - D5 = Matrix OFF, dial light solid ON
+- **D8:** Tuning capacitor timing input (folder selection)
+- **D13:** MP3 next‑track button (active‑low, debounced)
 
-### Folder Selection Input
-- **D1:** Tuning capacitor timing input -> maps charge time to folder 1–4  
-  - Note: D1 is Nano Serial TX; may interfere with USB Serial debugging/upload.
-
----
-
-## Behaviour Summary
-
-### Display Priority
-1) If D5 active → Matrix OFF, tuner light solid ON  
-2) Else if D3 active → Normal theme selection  
-3) Else if D4 active → Reserved (no special behaviour yet)
-
-### Themes (Normal when D3 active)
-- **BT selected (D2 HIGH):** PARTY pattern runs continuously
-- **MP3 selected (D2 LOW):**
-  - Folder 1: PARTY
-  - Folder 2: FIRE
-  - Folder 3: CHRISTMAS (red/green half pulsing)
-  - Folder 4: EERIE (green/blue slow pulsing + dial PWM synced)
-- Matrix constraint: **single color per 8-LED column**
-
-### MP3 Folder Change Sequence
-1) Mute volume  
-2) Send next/prev folder until desired folder reached  
-3) Send random-in-folder (starts at track 1; blank track 1 in each folder)  
-4) Send play  
-5) Set volume max
+### Outputs
+- **D7:** WS2812B 8×32 LED matrix
+- **D6:** Dial/tuner LED strip (PWM)
+- **A0:** Additional WS2812B LED strip
 
 ---
 
-## Code Locations (Current)
+## Folder / Theme Behaviour
 
-- **Main Arduino sketch:** `sketch/Vintage-Radio-1/Vintage-Radio-1.ino`  
-- Project docs:
-  - `docs/REQUIREMENTS.md`
-  - `docs/ARCHITECTURE.md`
-  - `docs/PINOUT.md`
-  - `docs/README.md`
+Folder selection maps to MP3 folders and display themes:
+
+| Folder | Meaning | Theme |
+|------|--------|------|
+| 1 | Valid | Party |
+| 2 | Valid | Fire |
+| 3 | Valid | Christmas |
+| 4 | Valid | Eerie |
+| 99 | Gap | Between‑stations flicker |
+| 255 | Fault | Treated as gap |
 
 ---
 
-## What’s Working Today
-- Currently all is functioning correctly with some tweaks to be made. 
+## Known Next Work
+
+Planned follow‑up tasks:
+- Reduce audible PWM noise from dial/tuner LEDs
+- Refine LED matrix animations (party + eerie)
+- Refine LED strip patterns
+- Document final calibration values once locked
 
 ---
 
-## Next Planned Work (High Level)
-- Current priority is to mitigate high pitch noise generated by tuner lights PWM on arduino pin 6.
-- Solid Tuner Display lights could also have their brightness incresed.
-- Review and tweak Matrix disply for Eerie and party themes.
-- Update github to reflect final configuration
+## Stability Notes
+
+- System runs for extended periods without lockups
+- No dynamic memory usage (`String` avoided)
+- Debug output is compile‑time controlled and predictable
