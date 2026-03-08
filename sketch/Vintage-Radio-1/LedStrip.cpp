@@ -1,19 +1,18 @@
 
 // LedStrip.cpp
 #include "LedStrip.h"
+#include "Config.h"
 
-#ifndef LEDSTRIP_DEBUG_EVENTS
-  // Keep quiet by default; will print if DEBUG==1 and you enable this.
-  // Set to 1 if you want strip-specific boot/event logs.
-  #define LEDSTRIP_DEBUG_EVENTS 1
-#endif
+// NOTE:
+// This module intentionally does NOT call FastLED.show() inside update().
+// The main loop should call LedStrip::update() BEFORE LedMatrix::update().
+// LedMatrix::update() calls FastLED.show() which updates ALL controllers.
 
 namespace LedStrip {
-
   // Hardware
-  static const uint8_t DATA_PIN = Config::PIN_STRIP_DATA;
-  static const uint16_t NUM_LEDS = Config::STRIP_NUM_LEDS;
-  static const EOrder COLOR_ORDER = GRB;
+  static const uint8_t  DATA_PIN    = Config::PIN_STRIP_DATA;
+  static const uint16_t NUM_LEDS    = Config::STRIP_NUM_LEDS;
+  static const EOrder   COLOR_ORDER = GRB;
 
   // Frame pacing
   static const uint16_t FRAME_INTERVAL_MS = 25;
@@ -23,9 +22,9 @@ namespace LedStrip {
 
   // State
   static uint32_t s_lastFrameMs = 0;
-  static bool s_isOffLatched = false;
-  static uint8_t s_baseHue = 0;
-  static uint8_t s_lastFolder = 255;
+  static bool     s_isOffLatched = false;
+  static uint8_t  s_baseHue = 0;
+  static uint8_t  s_lastFolder = 255;
 
   void clear() {
     fill_solid(s_leds, NUM_LEDS, CRGB::Black);
@@ -33,19 +32,16 @@ namespace LedStrip {
 
   static inline void renderTestPattern(uint8_t folder) {
     // Simple rainbow test pattern with a per-folder hue offset
-    // (keeps a clear pathway for future folder->theme mapping)
     const uint8_t folderOffset = (uint8_t)(folder * 16);
     const uint8_t startHue = (uint8_t)(s_baseHue + folderOffset);
-
-    // fill_rainbow is efficient and avoids large tables/arrays
     fill_rainbow(s_leds, NUM_LEDS, startHue, 5);
     s_baseHue++;
   }
 
   void begin() {
     FastLED.addLeds<WS2812B, DATA_PIN, COLOR_ORDER>(s_leds, NUM_LEDS);
-
     clear();
+
     // One-time show at boot so strip comes up in a known state.
     FastLED.show();
 
@@ -54,13 +50,7 @@ namespace LedStrip {
     s_baseHue = 0;
     s_lastFolder = 255;
 
-#if (LEDSTRIP_DEBUG_EVENTS == 1)
-    if (DEBUG == 1) {
-      Serial.print(F("[STRIP] Ready: "));
-      Serial.print(NUM_LEDS);
-      Serial.println(F(" LEDs on A0"));
-    }
-#endif
+    DBG_LED_STRIP2(F("[STRIP] Ready: "), NUM_LEDS);
   }
 
   void update(uint8_t folder, bool lightsOn) {
@@ -85,7 +75,6 @@ namespace LedStrip {
     // Optional: reset animation gently on folder change (keeps behaviour deterministic)
     if (folder != s_lastFolder) {
       s_lastFolder = folder;
-      // small deterministic nudge so themes will “switch” cleanly later
       s_baseHue = (uint8_t)(folder * 32);
     }
 
@@ -99,5 +88,4 @@ namespace LedStrip {
     // IMPORTANT: Do not call FastLED.show() here.
     // LedMatrix::update() already calls FastLED.show() and will output both controllers.
   }
-
 } // namespace LedStrip

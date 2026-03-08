@@ -89,8 +89,14 @@ static SourceMode readSourceMode() {
 }
 
 static uint8_t sanitizeFolder(uint8_t f) {
+  // 1..4 = valid
   if (f >= 1 && f <= 4) return f;
+
+  // 99 = gap
   if (f == 99) return 99;
+
+  // 255 = fault (treat as gap)
+  // anything else also treated as gap
   return 99;
 }
 
@@ -98,6 +104,7 @@ static uint8_t sanitizeFolder(uint8_t f) {
 // Setup
 // ============================================================
 void setup() {
+  // Serial debug must be set only once, here:
   Serial.begin(115200);
   delay(200);
 
@@ -123,9 +130,10 @@ void setup() {
 
   MP3::init();
 
+  // Initial matrix brightness
   FastLED.setBrightness(MATRIX_BRIGHT_NORMAL);
 
-  debugln(F("[BOOT] System ready"));
+  DBG_BOOT(F("[BOOT] System ready"));
 }
 
 // ============================================================
@@ -143,17 +151,17 @@ void loop() {
 
     switch (g_displayMode) {
       case DISPLAY_NORMAL:
-        debugln(F("Display mode: NORMAL"));
+        DBG_SRC(F("Display mode: NORMAL"));
         FastLED.setBrightness(MATRIX_BRIGHT_NORMAL);
         break;
 
       case DISPLAY_ALT:
-        debugln(F("Display mode: ALTERNATE"));
+        DBG_SRC(F("Display mode: ALTERNATE"));
         FastLED.setBrightness(MATRIX_BRIGHT_ALT);
         break;
 
       case DISPLAY_OFF:
-        debugln(F("Display mode: MATRIX_OFF"));
+        DBG_SRC(F("Display mode: MATRIX_OFF"));
         break;
     }
   }
@@ -167,12 +175,13 @@ void loop() {
   g_sourceMode = readSourceMode();
   if (g_sourceMode != g_lastSourceMode) {
     g_lastSourceMode = g_sourceMode;
+
     if (g_sourceMode == SOURCE_BT) {
       g_bt.wake();
-      debugln(F("[SRC] Bluetooth"));
+      DBG_SRC(F("[SRC] Bluetooth"));
     } else {
       g_bt.sleep();
-      debugln(F("[SRC] MP3"));
+      DBG_SRC(F("[SRC] MP3"));
     }
   }
 
@@ -181,22 +190,27 @@ void loop() {
   // Only active when MP3 source is selected.
   // ----------------------------------------------------------
   const uint8_t btn = digitalRead(Config::PIN_NEXT_TRACK_BUTTON);
+
   if (btn != g_nextBtnRaw) {
     g_nextBtnRaw = btn;
     g_nextBtnLastChangeMs = now;
   }
-  if ((now - g_nextBtnLastChangeMs) >= NEXT_BTN_DEBOUNCE_MS && g_nextBtnStable != g_nextBtnRaw) {
+
+  if ((now - g_nextBtnLastChangeMs) >= NEXT_BTN_DEBOUNCE_MS &&
+      g_nextBtnStable != g_nextBtnRaw) {
+
     g_nextBtnStable = g_nextBtnRaw;
+
     if (g_nextBtnStable == LOW) {
       if (g_sourceMode == SOURCE_MP3) {
         MP3::nextTrack();
-        debugln(F("MP3: Next track (button)"));
+        DBG_MP3(F("MP3: Next track (button)"));
       }
     }
   }
 
   // ----------------------------------------------------------
-  // Folder selection (Option 1: isolate RC timing from FastLED.show)
+  // Folder selection (isolate RC timing from FastLED.show)
   // ----------------------------------------------------------
   bool didTunePollThisLoop = false;
 
@@ -224,6 +238,7 @@ void loop() {
   // Dial LED (dimmed in ALT)
   // ----------------------------------------------------------
   if (!lightsOn) {
+    // Matrix off: dial forced solid ON
     DisplayLED::setSolid(altMode ? DIAL_SOLID_ALT : DIAL_SOLID_NORMAL);
   } else if (g_folder == 99) {
     DisplayLED::flickerRandomTick(
@@ -243,15 +258,14 @@ void loop() {
   }
 
   // ----------------------------------------------------------
-  // LEDs (Option 1): skip LED updates on the RC-measurement iteration
-  // This prevents FastLED.show() (called inside LedMatrix::update) from
-  // overlapping the RC timing measurement window. [1](https://teamtelstra-my.sharepoint.com/personal/jeff_c_cornwell_team_telstra_com/Documents/Microsoft%20Copilot%20Chat%20Files/LedMatrix.cpp)
+  // LEDs: skip LED updates on the RC-measurement iteration
+  // Prevent FastLED.show() (inside LedMatrix::update) overlapping RC timing.
   // ----------------------------------------------------------
   if (!didTunePollThisLoop) {
     // Strip update first (no FastLED.show() here)
     LedStrip::update(g_folder, lightsOn);
 
     // Matrix update (calls FastLED.show())
-    LedMatrix::update(g_folder, lightsOn); // show happens inside update [1](https://teamtelstra-my.sharepoint.com/personal/jeff_c_cornwell_team_telstra_com/Documents/Microsoft%20Copilot%20Chat%20Files/LedMatrix.cpp)
+    LedMatrix::update(g_folder, lightsOn);
   }
 }

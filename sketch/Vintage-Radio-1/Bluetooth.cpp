@@ -4,11 +4,11 @@
 #include "Config.h"
 
 BluetoothModule::BluetoothModule(uint8_t rxPin, uint8_t txPin)
-  : _rxPin(rxPin),
-    _txPin(txPin),
-    _baud(0),
-    _active(false),
-    btSerial(rxPin, txPin) {
+ : _rxPin(rxPin),
+   _txPin(txPin),
+   _baud(0),
+   _active(false),
+   btSerial(rxPin, txPin) {
 }
 
 void BluetoothModule::begin(long baudRate) {
@@ -28,7 +28,6 @@ void BluetoothModule::wake() {
 
 void BluetoothModule::sleep() {
   if (!_active) return;
-
   // Stop SoftwareSerial to avoid background ISR timing interference
   btSerial.end();
   _active = false;
@@ -46,20 +45,22 @@ void BluetoothModule::sendInitialCommands() {
   if (!_active) wake();
 
   // Commands stored in flash to save SRAM.
-  sendCommand(F("AT+CT04"));            // baud rate setting kept per working setup
+  sendCommand(F("AT+CT04")); // baud rate setting kept per working setup
   delay(50);
-  sendCommand(F("AT+BDO'l Timey Radio"));// device name
+  sendCommand(F("AT+BDO'l Timey Radio")); // device name
   delay(50);
-  sendCommand(F("AT+CK00"));            // disable auto-switch
+  sendCommand(F("AT+CK00")); // disable auto-switch
   delay(50);
-  sendCommand(F("AT+B200"));            // disable call functions
+  sendCommand(F("AT+B200")); // disable call functions
   delay(50);
-  sendCommand(F("AT+CA30"));            // volume 100%
+  sendCommand(F("AT+CA30")); // volume 100%
   delay(50);
-  sendCommand(F("AT+CN00"));            // disable prompts
+  sendCommand(F("AT+CN00")); // disable prompts
   delay(50);
-  sendCommand(F("AT+CQ01"));            // EQ Rock
+  sendCommand(F("AT+CQ01")); // EQ Rock
   delay(50);
+
+  DBG_BT(F("[BT] Initial AT commands sent"));
 }
 
 void BluetoothModule::sendCommand(const __FlashStringHelper *cmd) {
@@ -86,11 +87,8 @@ void BluetoothModule::passthrough() {
       btSerial.print(buf);
       btSerial.print("\r\n");
 
-      // Only print passthrough debug when DEBUG enabled
-      if (DEBUG == 1) {
-        Serial.print(F("[DEBUG] Sent to BT: "));
-        Serial.println(buf);
-      }
+      // Optional passthrough debug (BT_DEBUG)
+      DBG_BT2(F("[BT] Sent: "), buf);
     }
   }
 
