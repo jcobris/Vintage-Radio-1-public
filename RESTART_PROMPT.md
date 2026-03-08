@@ -40,8 +40,7 @@ Folder numbering standard: 1..4, 99 = gap, 255 = fault; treat 255 as 99 before c
 
 Hardware under test
 
-Tuner RC timing input is wired to Config::PIN_TUNING_INPUT = D8
-The knob has 4 stable positions + dead zones between them
+None
 
 Current state + constraints
 
@@ -56,4 +55,6 @@ If you need a new file: provide full content and exact path.
 
 
 First task for you (Step 1 only)
-The Tuner/Display LEDs are introducing high pitch noise into the audio. Lets mitigate that.
+My GitHub files are out dated. I have since added a 'next track' button and also an additional LED strip. The project is currently fully functional however I will want to update the LED Matrix patterns and the LED Strip pattern.
+I have pasted my sketch files. First task is to review the debug code to make sure it's good for final code. Provide any suggestions. It would be good if I can turn on/off debugging globally (which is already coded) but also enable/disable specific function debuging within the various function files.
+Step 2 will be to review and update all the github files to reflect current project status and changes.
