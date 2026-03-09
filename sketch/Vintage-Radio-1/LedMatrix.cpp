@@ -2,91 +2,51 @@
 // LedMatrix.cpp
 #include "LedMatrix.h"
 
-/*
-  ============================================================
-  Implementation notes
-  ============================================================
-
-  Column-color rule:
-  - This matrix is treated as 32 "columns", each containing 8 LEDs.
-  - Every renderer computes a single CRGB per column and applies it to the 8 LEDs.
-
-  OFF / GAP behaviour:
-  - If lightsOn==false OR folder==99:
-      - clear()
-      - FastLED.show()
-      - latch into an "off" state so we do not spam show() every loop
-  - When we return to a real folder with lightsOn==true, the latch is released.
-
-  Frame throttling:
-  - Rendering is limited to one frame per FRAME_INTERVAL_MS.
-*/
-
 namespace LedMatrix {
-
-  // LED frame buffer
   CRGB leds[NUM_LEDS];
 
-  // Frame timing
   static uint32_t lastFrameMs = 0;
-
-  // OFF latch:
-  // true  = matrix has already been cleared and shown for OFF/GAP state
-  // false = normal rendering is active
   static bool s_isOffLatched = false;
 
-  // ------------------------------------------------------------
-  // Folder 1 (Party marble) state
-  // ------------------------------------------------------------
+  // Folder 1
   static CRGBPalette16 partyPalette = PartyColors_p;
   static uint32_t partyTime = 0;
 
-  // ------------------------------------------------------------
-  // Folder 4 (Spooky) palette + state
-  // ------------------------------------------------------------
-  static const TProgmemRGBPalette16 SpookyAquaGreen_p PROGMEM = {
-    0x10C0FF, 0x20D8FF, 0x30F0FF, 0x20FFE0,
-    0x10FFC0, 0x00FFA0, 0x00FF80, 0x20FF60,
-    0x40FF40, 0x30E040, 0x20C050, 0x10A070,
-    0x1080A0, 0x30A0C0, 0x20A8B0, 0x208880
-  };
-  static CRGBPalette16 spookyPalette = SpookyAquaGreen_p;
+  // Folder 4
   static uint32_t spookyTime = 0;
 
-  // ------------------------------------------------------------
-  // Folder 2 (Fire) column state
-  // ------------------------------------------------------------
-  // One heat value per column (32 columns)
+  // Fixed-point smoothed pulse for spooky breathing:
+  // store 8.8 fixed point (upper 8 bits = integer 0..255, lower 8 bits = fraction)
+  static uint16_t s_spookyPulseQ8_8 = 0;
+
+  // Folder 2
   static uint8_t fireHeat[32] = {0};
-
-  // Glow base tracking (smoothed)
   static uint8_t glowTrack[32] = {0};
-
-  // Flicker control
   static uint8_t flickerTick = 0;
   static uint8_t flickerJitter[32] = {0};
-
-  // Noise time + horizontal drift for sparks
-  static uint32_t sparkNoiseTime  = 0;
+  static uint32_t sparkNoiseTime = 0;
   static uint32_t sparkNoiseTime2 = 0;
-  static int32_t  sparkDriftX     = 0;
+  static int32_t sparkDriftX = 0;
 
-  // ------------------------------------------------------------
-  // Helpers
-  // ------------------------------------------------------------
-
-  // Each column is stored as a contiguous block of 8 LEDs in the buffer.
   static inline uint16_t blockBaseIndex(uint16_t column) { return column * 8; }
 
-  // Weighted mixing helper for heat diffusion and noise blending
   static inline uint8_t mixWeighted(uint8_t self, uint8_t neighbor, uint8_t neighborWeight) {
     uint16_t acc = (uint16_t)self * (255 - neighborWeight) + (uint16_t)neighbor * neighborWeight;
     return (uint8_t)(acc / 255);
   }
-
   static inline uint8_t mix8(uint8_t a, uint8_t b, uint8_t w) { return mixWeighted(a, b, w); }
 
-} // namespace LedMatrix
+  // Local 16-bit triangle wave helper (FastLED in your build lacks triwave16()).
+  // Input:  0..65535 phase
+  // Output: 0..65534 triangle wave (symmetric, constant slope)
+  static inline uint16_t triwave16_local(uint16_t phase) {
+    if (phase < 32768) {
+      return (uint16_t)((uint32_t)phase * 2U);
+    } else {
+      return (uint16_t)((uint32_t)(65535U - phase) * 2U);
+    }
+  }
+}
 
 using namespace LedMatrix;
 
@@ -107,62 +67,51 @@ void LedMatrix::clear() {
 }
 
 // ------------------------------------------------------------
-// Renderers (one color per column)
+// Renderers
 // ------------------------------------------------------------
-
 static void renderPartyMarble() {
   partyTime += LedMatrix::PARTY_TIME_NOISE_SPEED;
-
-  // Two slow oscillators create additional motion/variation
   const uint8_t swirlA = beatsin8(7, 0, 255);
   const uint8_t swirlB = beatsin8(13, 0, 255);
 
   for (uint16_t col = 0; col < LedMatrix::MATRIX_WIDTH; ++col) {
     uint32_t x = (uint32_t)col * LedMatrix::PARTY_COLUMN_NOISE_SCALE;
     uint16_t z = (uint16_t)(partyTime + (swirlA / 2) + (swirlB / 3));
-
-    // Noise drives palette index
     uint8_t n = inoise8((uint16_t)(x & 0xFFFF), z);
     uint8_t index = qadd8(n, 30);
-
     CRGB color = ColorFromPalette(LedMatrix::partyPalette, index, 255);
 
-    // Apply same color to the whole 8-LED column
     uint16_t base = blockBaseIndex(col);
     for (uint8_t i = 0; i < 8; ++i) leds[base + i] = color;
   }
 }
 
 static void renderFireColumns() {
-  // Cool down each column a little
   for (uint8_t col = 0; col < 32; ++col) {
     uint8_t cooldown = random8(0, ((FIRE_COOLING * 10) / 32) + FIRE_FLICKER_VARIANCE);
     fireHeat[col] = (fireHeat[col] > cooldown) ? (fireHeat[col] - cooldown) : 0;
   }
 
-  // Advance noise time and drift for sparks
-  sparkNoiseTime  += FIRE_SPARK_NOISE_SPEED;
+  sparkNoiseTime += FIRE_SPARK_NOISE_SPEED;
   sparkNoiseTime2 += FIRE_SPARK_NOISE_SPEED2;
-  sparkDriftX     += (int32_t)FIRE_SPARK_DRIFT_SPEED;
+  sparkDriftX += (int32_t)FIRE_SPARK_DRIFT_SPEED;
 
-  // Global sparks: noise-driven probability to add heat to columns
   for (uint8_t col = 0; col < 32; ++col) {
-    uint16_t x1 = (uint16_t)(col * FIRE_SPARK_NOISE_SCALE  + (sparkDriftX & 0xFFFF));
+    uint16_t x1 = (uint16_t)(col * FIRE_SPARK_NOISE_SCALE + (sparkDriftX & 0xFFFF));
     uint16_t x2 = (uint16_t)(col * FIRE_SPARK_NOISE_SCALE2 - ((sparkDriftX / 2) & 0xFFFF));
-
     uint8_t n1 = inoise8(x1, (uint16_t)sparkNoiseTime);
     uint8_t n2 = inoise8(x2, (uint16_t)sparkNoiseTime2);
-
     uint8_t nCombined = mix8(n1, n2, FIRE_SPARK_OCTAVE_BLEND);
-
     uint8_t prob = (uint8_t)map(nCombined, 0, 255, FIRE_SPARK_MIN_PROB, FIRE_SPARK_MAX_PROB);
+
     if (random8() < prob) {
-      fireHeat[col] = qadd8(fireHeat[col],
-                            random8(FIRE_GLOBAL_SPARK_HEAT_MIN, FIRE_GLOBAL_SPARK_HEAT_MAX));
+      fireHeat[col] = qadd8(
+        fireHeat[col],
+        random8(FIRE_GLOBAL_SPARK_HEAT_MIN, FIRE_GLOBAL_SPARK_HEAT_MAX)
+      );
     }
   }
 
-  // Diffuse heat horizontally (two passes)
   for (uint8_t col = 31; col > 0; --col) {
     fireHeat[col] = mixWeighted(fireHeat[col], fireHeat[col - 1], FIRE_DIFFUSE_WEIGHT);
   }
@@ -170,12 +119,10 @@ static void renderFireColumns() {
     fireHeat[col] = mixWeighted(fireHeat[col], fireHeat[col + 1], FIRE_DIFFUSE_WEIGHT);
   }
 
-  // Track glow base (smoothed)
   for (uint8_t col = 0; col < 32; ++col) {
     glowTrack[col] = lerp8by8(glowTrack[col], fireHeat[col], GLOW_TRACK_WEIGHT);
   }
 
-  // Flicker jitter update at a slower cadence
   flickerTick++;
   const bool updateJitterNow = (flickerTick % FIRE_FLICKER_PERIOD) == 0;
   if (updateJitterNow) {
@@ -184,10 +131,7 @@ static void renderFireColumns() {
     }
   }
 
-  // Render each column (glow base + flame highlight)
   for (uint8_t col = 0; col < 32; ++col) {
-
-    // Base glow layer
     uint8_t glowV = (uint8_t)map(glowTrack[col], 0, 255, GLOW_VAL_MIN, GLOW_VAL_MAX);
     CHSV glowHSV(GLOW_HUE, GLOW_SAT, glowV);
     CRGB baseGlow = glowHSV;
@@ -195,12 +139,10 @@ static void renderFireColumns() {
     uint16_t base = blockBaseIndex(col);
     for (uint8_t i = 0; i < 8; ++i) leds[base + i] = baseGlow;
 
-    // Flame highlight layer
     uint8_t jitter = flickerJitter[col];
     uint8_t vBase = qadd8(FIRE_BASE_BRIGHTNESS, jitter);
     CRGB flame = ColorFromPalette(HeatColors_p, fireHeat[col], vBase);
 
-    // Max-blend flame over glow
     for (uint8_t i = 0; i < 8; ++i) {
       CRGB &px = leds[base + i];
       px.r = max(px.r, flame.r);
@@ -211,34 +153,75 @@ static void renderFireColumns() {
 }
 
 static void renderXmasColumns() {
-  // Two pulses out of phase
   uint8_t brightA = beatsin8(XMAS_PULSE_BPM, XMAS_MIN_BRIGHT, XMAS_MAX_BRIGHT, 0, 0);
   uint8_t brightB = beatsin8(XMAS_PULSE_BPM, XMAS_MIN_BRIGHT, XMAS_MAX_BRIGHT, 0, 128);
 
   for (uint16_t col = 0; col < 32; ++col) {
-    // Left half red, right half green
     CRGB color = (col < 16) ? CRGB(brightA, 0, 0) : CRGB(0, brightB, 0);
-
     uint16_t base = blockBaseIndex(col);
     for (uint8_t i = 0; i < 8; ++i) leds[base + i] = color;
   }
 }
 
 static void renderSpookyColumns() {
+  // Advance time for marbling field
   spookyTime += SPOOKY_TIME_NOISE_SPEED;
 
-  // Breathing pulse dims/brightens the whole palette
-  uint8_t pulse = beatsin8(SPOOKY_PULSE_BPM, 30, 255);
+  // ----------------------------------------------------------
+  // Breathing: 16-bit TRIANGLE + fixed-point smoothing (Q8.8)
+  // targetQ8_8 computed directly from tri16 to avoid endpoint "stickiness"
+  // ----------------------------------------------------------
+  const uint8_t  PULSE_MIN = 20;
+  const uint8_t  PULSE_MAX = 150;
+  const uint16_t rangeQ8_8 = (uint16_t)(PULSE_MAX - PULSE_MIN) << 8;
+
+  const uint16_t phase16 = beat16(SPOOKY_PULSE_BPM);
+  const uint16_t tri16   = triwave16_local(phase16);
+
+  const uint16_t targetQ8_8 =
+    (uint16_t)(PULSE_MIN << 8) + (uint16_t)(((uint32_t)tri16 * (uint32_t)rangeQ8_8) >> 16);
+
+  if (s_spookyPulseQ8_8 == 0) s_spookyPulseQ8_8 = targetQ8_8;
+
+  // Smooth: alpha = 1/16
+  int16_t diff = (int16_t)(targetQ8_8 - s_spookyPulseQ8_8);
+  s_spookyPulseQ8_8 = (uint16_t)(s_spookyPulseQ8_8 + (diff >> 4));
+
+  const uint8_t pulse = (uint8_t)(s_spookyPulseQ8_8 >> 8);
+
+  // ----------------------------------------------------------
+  // Purple edges: 2 columns per side
+  // ----------------------------------------------------------
+  const uint8_t EDGE_W = 2;
+
+  uint8_t edgeV = scale8(pulse, 208);
+  if (edgeV < 45) edgeV = 45;
+  const CRGB edgePurple = CHSV(205, 255, edgeV);
+
+  // ----------------------------------------------------------
+  // Hue-contrast marbling (colour-good settings)
+  // ----------------------------------------------------------
+  const uint8_t SPOOKY_HUE_MIN = 60;
+  const uint8_t SPOOKY_HUE_MAX = 124;
 
   for (uint16_t col = 0; col < 32; ++col) {
-    uint32_t x = (uint32_t)col * SPOOKY_COLUMN_NOISE_SCALE;
-    uint16_t z = (uint16_t)(spookyTime);
+    const uint16_t x = (uint16_t)((uint32_t)col * SPOOKY_COLUMN_NOISE_SCALE);
+    const uint16_t z = (uint16_t)spookyTime;
 
-    uint8_t n = inoise8((uint16_t)(x & 0xFFFF), z);
-    uint8_t index = qadd8(n, 40);
+    uint8_t n1 = inoise8(x, z);
+    uint8_t n2 = inoise8((uint16_t)(x >> 1), (uint16_t)(z + 137));
+    uint8_t n  = lerp8by8(n1, n2, 96);
+    n = ease8InOutQuad(n);
 
-    CRGB color = ColorFromPalette(spookyPalette, index, 255);
-    color.nscale8_video(pulse);
+    uint8_t hue = (uint8_t)map(n, 0, 255, SPOOKY_HUE_MIN, SPOOKY_HUE_MAX);
+    uint8_t sat = (uint8_t)map(n2, 0, 255, 180, 255);
+
+    CRGB color = CHSV(hue, sat, pulse);
+
+    // Edges: solid purple columns (2 per side)
+    if (col < EDGE_W || col >= (32 - EDGE_W)) {
+      color = edgePurple;
+    }
 
     uint16_t base = blockBaseIndex(col);
     for (uint8_t i = 0; i < 8; ++i) leds[base + i] = color;
@@ -251,8 +234,6 @@ static void renderSpookyColumns() {
 void LedMatrix::update(uint8_t folder, bool lightsOn) {
   const uint32_t now = millis();
 
-  // OFF / GAP handling:
-  // - If lights are off or folder==99, clear and show ONCE per transition.
   if (!lightsOn || folder == 99) {
     if (!s_isOffLatched) {
       clear();
@@ -263,35 +244,19 @@ void LedMatrix::update(uint8_t folder, bool lightsOn) {
     return;
   }
 
-  // If we were previously off, unlatch on first "on" update
-  if (s_isOffLatched) {
-    s_isOffLatched = false;
-  }
+  if (s_isOffLatched) s_isOffLatched = false;
 
-  // Frame rate limiting
   if (now - lastFrameMs < FRAME_INTERVAL_MS) return;
   lastFrameMs = now;
 
-  // Render by folder
   switch (folder) {
-    case 1:
-      renderPartyMarble();
-      break;
-
+    case 1: renderPartyMarble(); break;
     case 2:
       for (uint8_t i = 0; i < FIRE_SPEED_SCALE; ++i) renderFireColumns();
       break;
-
-    case 3:
-      renderXmasColumns();
-      break;
-
-    case 4:
-      renderSpookyColumns();
-      break;
-
+    case 3: renderXmasColumns(); break;
+    case 4: renderSpookyColumns(); break;
     default:
-      // Safety: unknown folder -> blank
       clear();
       FastLED.show();
       return;

@@ -105,13 +105,8 @@ unless explicitly asked.
 
 ---
 
-## CURRENT TASK (Update This Section Each Time)
+## CURRENT TASK 
 
-> Describe the specific task you want to work on *in this session*.
-> Examples:
-> - Refine LED matrix animations for eerie theme
-> - Reduce PWM noise on dial LEDs
-> - Update documentation to reflect wiring changes
-> - Review a specific module for cleanup
+
 
 **Current task:**

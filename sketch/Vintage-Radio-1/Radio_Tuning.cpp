@@ -36,12 +36,12 @@ namespace {
   // Tuned thresholds (us)
   // ------------------------------------------------------------
   const uint32_t FOLDER4_LOWER_US = 0;
-  const uint32_t FOLDER4_UPPER_US = 32;
+  const uint32_t FOLDER4_UPPER_US = 34;
 
   const uint32_t FOLDER3_LOWER_US = 38;
   const uint32_t FOLDER3_UPPER_US = 48;
 
-  const uint32_t FOLDER2_LOWER_US = 56;
+  const uint32_t FOLDER2_LOWER_US = 52;
   const uint32_t FOLDER2_UPPER_US = 84;
 
   const uint32_t FOLDER1_LOWER_US = 112;
