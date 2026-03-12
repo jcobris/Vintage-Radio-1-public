@@ -81,7 +81,7 @@ namespace LedMatrix {
   static const uint8_t  GLOW_TRACK_WEIGHT = 16;
 
   // Folder 3: Christmas calm alternating pulse
-  static const uint8_t XMAS_MIN_BRIGHT = 30;
+  static const uint8_t XMAS_MIN_BRIGHT = 20;
   static const uint8_t XMAS_MAX_BRIGHT = 255;
   static const uint8_t XMAS_PULSE_BPM  = 18;
 

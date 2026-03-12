@@ -19,20 +19,20 @@ static const uint8_t MATRIX_BRIGHT_NORMAL = 200;
 static const uint8_t MATRIX_BRIGHT_ALT    = 100;
 
 // Dial / tuning illumination LED
-static const uint8_t DIAL_SOLID_NORMAL = 60;
-static const uint8_t DIAL_SOLID_ALT    = 25;
+static const uint8_t DIAL_SOLID_NORMAL = 100;
+static const uint8_t DIAL_SOLID_ALT    = 60;
 
 // Pulse behaviour (folder 4)
-static const uint8_t DIAL_PULSE_MIN_NORMAL = 30;
-static const uint8_t DIAL_PULSE_MAX_NORMAL = 255;
+static const uint8_t DIAL_PULSE_MIN_NORMAL = 60;
+static const uint8_t DIAL_PULSE_MAX_NORMAL = 120;
 static const uint8_t DIAL_PULSE_MIN_ALT    = 10;
-static const uint8_t DIAL_PULSE_MAX_ALT    = 120;
+static const uint8_t DIAL_PULSE_MAX_ALT    = 60;
 static const uint16_t DIAL_PULSE_TICK_MS   = 18;
 static const uint8_t  DIAL_PULSE_BPM       = 12;
 
 // Flicker behaviour (between stations)
 static const uint8_t  DIAL_FLICKER_MIN_NORMAL = 30;
-static const uint8_t  DIAL_FLICKER_MAX_NORMAL = 160;
+static const uint8_t  DIAL_FLICKER_MAX_NORMAL = 120;
 static const uint8_t  DIAL_FLICKER_MIN_ALT    = 10;
 static const uint8_t  DIAL_FLICKER_MAX_ALT    = 70;
 static const uint16_t DIAL_FLICKER_TICK_MS    = 40;
