@@ -22,6 +22,12 @@ static const uint8_t MATRIX_BRIGHT_ALT    = 100;
 static const uint8_t DIAL_SOLID_NORMAL = 70;
 static const uint8_t DIAL_SOLID_ALT    = 30;
 
+// When the matrix is switched OFF, WS2812 load disappears and the 5V rail can rise,
+// making the dial LED appear noticeably brighter at the same PWM level.
+// Provide a separate solid brightness for "matrix off" to compensate perceptually.
+static const uint8_t DIAL_SOLID_MATRIX_OFF_NORMAL = 55; // tune to taste
+static const uint8_t DIAL_SOLID_MATRIX_OFF_ALT    = 25; // tune to taste
+
 // Pulse behaviour (folder 4) - shared breath for matrix + dial
 static const uint8_t DIAL_PULSE_MIN_NORMAL = 30;
 static const uint8_t DIAL_PULSE_MAX_NORMAL = 60;
@@ -31,7 +37,7 @@ static const uint8_t DIAL_PULSE_BPM        = 12;
 
 // Flicker behaviour (between stations)
 static const uint8_t  DIAL_FLICKER_MIN_NORMAL = 30;
-static const uint8_t  DIAL_FLICKER_MAX_NORMAL = 600;
+static const uint8_t  DIAL_FLICKER_MAX_NORMAL = 60;
 static const uint8_t  DIAL_FLICKER_MIN_ALT    = 10;
 static const uint8_t  DIAL_FLICKER_MAX_ALT    = 30;
 static const uint16_t DIAL_FLICKER_TICK_MS    = 10;
@@ -237,8 +243,9 @@ void loop() {
   // Dial LED + Matrix Folder 4 shared breathing (dimmed in ALT)
   // ----------------------------------------------------------
   if (!lightsOn) {
-    // Matrix off: dial forced solid ON
-    DisplayLED::setSolid(altMode ? DIAL_SOLID_ALT : DIAL_SOLID_NORMAL);
+    // Matrix off: dial forced solid ON (use dedicated brightness to compensate
+    // for higher apparent brightness when WS2812 load is removed)
+    DisplayLED::setSolid(altMode ? DIAL_SOLID_MATRIX_OFF_ALT : DIAL_SOLID_MATRIX_OFF_NORMAL);
     LedMatrix::setSpookyBreath(0xFF); // release override
   } else if (g_folder == 99) {
     DisplayLED::flickerRandomTick(

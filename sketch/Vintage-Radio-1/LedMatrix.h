@@ -48,7 +48,7 @@ namespace LedMatrix {
   static const EOrder   COLOR_ORDER   = GRB;
 
   // Frame pacing
-  static const uint16_t FRAME_INTERVAL_MS = 15;
+  static const uint16_t FRAME_INTERVAL_MS = 30;
 
   // Folder 1: Party marble (relaxed)
   static const uint16_t PARTY_COLUMN_NOISE_SCALE = 4000;
