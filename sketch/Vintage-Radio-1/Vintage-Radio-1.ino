@@ -19,7 +19,7 @@ static const uint8_t MATRIX_BRIGHT_NORMAL = 200;
 static const uint8_t MATRIX_BRIGHT_ALT    = 100;
 
 // Dial / tuning illumination LED (PWM)
-static const uint8_t DIAL_SOLID_NORMAL = 60;
+static const uint8_t DIAL_SOLID_NORMAL = 40;
 static const uint8_t DIAL_SOLID_ALT    = 30;
 
 // When the matrix is switched OFF, WS2812 load disappears and the 5V rail can rise,
@@ -30,14 +30,14 @@ static const uint8_t DIAL_SOLID_MATRIX_OFF_ALT    = 25; // tune to taste
 
 // Pulse behaviour (folder 4) - shared breath for matrix + dial
 static const uint8_t DIAL_PULSE_MIN_NORMAL = 30;
-static const uint8_t DIAL_PULSE_MAX_NORMAL = 60;
+static const uint8_t DIAL_PULSE_MAX_NORMAL = 40;
 static const uint8_t DIAL_PULSE_MIN_ALT    = 10;
 static const uint8_t DIAL_PULSE_MAX_ALT    = 30;
 static const uint8_t DIAL_PULSE_BPM        = 12;
 
 // Flicker behaviour (between stations)
 static const uint8_t  DIAL_FLICKER_MIN_NORMAL = 30;
-static const uint8_t  DIAL_FLICKER_MAX_NORMAL = 60;
+static const uint8_t  DIAL_FLICKER_MAX_NORMAL = 40;
 static const uint8_t  DIAL_FLICKER_MIN_ALT    = 10;
 static const uint8_t  DIAL_FLICKER_MAX_ALT    = 30;
 static const uint16_t DIAL_FLICKER_TICK_MS    = 10;

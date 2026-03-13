@@ -29,13 +29,25 @@ namespace LedStrip {
   // Folder 1 (Party)
   static uint32_t s_partyTime     = 0;
 
-  // Folder 2 (Embers) - NO per-LED heat buffer (SRAM saver)
+  // Folder 2 (Embers) - no per-LED heat buffer (SRAM saver)
   static uint32_t s_emberTime     = 0;
   static int32_t  s_emberDriftX   = 0;
 
   // Folder 4 (Spooky) - external breath override (0xFF = not set)
   static uint8_t  s_externalSpookyBreath = 0xFF;
   static uint32_t s_spookyTime   = 0;
+
+  // ------------------------------------------------------------
+  // Band widening control
+  // ------------------------------------------------------------
+  // Requested: widen folder 1,2,4 by factor of 4 => one computed colour spans 4 LEDs.
+  static const uint8_t BLOCK_SIZE = 4;
+
+  // Feathering: apply a light in-place blur after block rendering to reduce "hard steps".
+  // These values are intentionally small so the 4-LED banding remains obvious but softened.
+  static const uint8_t FEATHER_PARTY  = 18;
+  static const uint8_t FEATHER_EMBER  = 14;
+  static const uint8_t FEATHER_SPOOKY = 18;
 
   void clear() {
     fill_solid(s_leds, NUM_LEDS, CRGB::Black);
@@ -45,86 +57,102 @@ namespace LedStrip {
     s_externalSpookyBreath = pulse;
   }
 
+  // Write a single colour across a block [i .. i+BLOCK_SIZE-1], clamped to NUM_LEDS.
+  static inline void fillBlock(uint16_t i, const CRGB &c) {
+    for (uint8_t k = 0; k < BLOCK_SIZE; ++k) {
+      const uint16_t idx = (uint16_t)(i + k);
+      if (idx >= NUM_LEDS) break;
+      s_leds[idx] = c;
+    }
+  }
+
+  // Feather block edges without extra SRAM: a light blur is enough to soften the steps.
+  static inline void featherEdges(uint8_t amount) {
+    // blur1d works in-place on the existing LED buffer.
+    // amount: 0..255 (higher = more blur).
+    if (amount == 0) return;
+    blur1d(s_leds, NUM_LEDS, amount);
+  }
+
   // ------------------------------------------------------------
   // Renderers
   // ------------------------------------------------------------
 
-  // Folder 1: Party / rainbow marble-ish
-  static inline void renderPartyMarbleStrip() {
+  // Folder 1: Party / rainbow marble-ish (block-rendered x4 + feather)
+  static inline void renderPartyMarbleStrip_Block4() {
     s_partyTime += 3;
 
+    // Virtual pixels = blocks
+    const uint16_t virtualCount = (uint16_t)((NUM_LEDS + (BLOCK_SIZE - 1)) / BLOCK_SIZE);
+
+    // Keep existing "feel" but with wider bands due to virtualCount reduction.
     const uint16_t NOISE_SCALE = 380;
     const uint8_t  BRIGHT      = 255;
 
     const uint8_t swirlA = beatsin8(7, 0, 255);
     const uint8_t swirlB = beatsin8(13, 0, 255);
 
-    for (uint16_t i = 0; i < NUM_LEDS; ++i) {
-      const uint16_t x = (uint16_t)(i * NOISE_SCALE);
+    for (uint16_t v = 0; v < virtualCount; ++v) {
+      const uint16_t x = (uint16_t)(v * NOISE_SCALE);
       const uint16_t z = (uint16_t)(s_partyTime + (swirlA / 2) + (swirlB / 3));
-      uint8_t n = inoise8(x, z);
-      uint8_t index = qadd8(n, 30);
-      s_leds[i] = ColorFromPalette(PartyColors_p, index, BRIGHT);
+      const uint8_t  n = inoise8(x, z);
+      const uint8_t  index = qadd8(n, 30);
+
+      const CRGB c = ColorFromPalette(PartyColors_p, index, BRIGHT);
+
+      const uint16_t i = (uint16_t)(v * BLOCK_SIZE);
+      fillBlock(i, c);
     }
+
+    // Soften hard steps between blocks.
+    featherEdges(FEATHER_PARTY);
   }
 
-  // Folder 2: Ember glow (fireplace vibe) - NO heat buffer
-  static inline void renderEmberGlowStrip() {
-    // This deliberately avoids a per-LED heat array to save SRAM.
-    // Noise is temporally coherent, so it still looks smooth, especially at 30ms frames.
-
-    // Slow movement
+  // Folder 2: Ember glow (fireplace vibe) (block-rendered x4 + feather)
+  static inline void renderEmberGlowStrip_Block4() {
     s_emberTime += 1;
     s_emberDriftX += 1;
 
-    // Wide patches for 128 LED strip
+    const uint16_t virtualCount = (uint16_t)((NUM_LEDS + (BLOCK_SIZE - 1)) / BLOCK_SIZE);
+
     const uint16_t NOISE_SCALE = 220;
 
-    // Ember range: keep it in red/orange (avoid white-hot flame)
-    const uint8_t EMBER_INDEX_MIN = 18;   // deep red
-    const uint8_t EMBER_INDEX_MAX = 140;  // orange
+    const uint8_t EMBER_INDEX_MIN = 18;
+    const uint8_t EMBER_INDEX_MAX = 140;
 
-    // Brightness shaping
     const uint8_t VAL_MIN = 120;
     const uint8_t VAL_MAX = 255;
 
-    // Rare small pops
-    const uint8_t POP_PROB = 3;           // out of 255, per LED per frame (very rare)
+    const uint8_t POP_PROB = 3;   // /255 per block per frame (very rare)
     const uint8_t POP_ADD_R = 40;
     const uint8_t POP_ADD_G = 15;
 
-    // Very light blur to widen glow without losing detail
-    const uint8_t COLOR_BLUR_AMOUNT = 12;
-
-    // Gentle global shimmer
     const uint8_t shimmer = beatsin8(6, 0, 25);
 
-    for (uint16_t i = 0; i < NUM_LEDS; ++i) {
-      const uint16_t x = (uint16_t)((uint32_t)i * NOISE_SCALE + (uint16_t)(s_emberDriftX & 0xFFFF));
+    for (uint16_t v = 0; v < virtualCount; ++v) {
+      const uint16_t x = (uint16_t)((uint32_t)v * NOISE_SCALE + (uint16_t)(s_emberDriftX & 0xFFFF));
       const uint8_t  n = inoise8(x, (uint16_t)s_emberTime);
 
-      // Index controls the HeatColors palette pick (red->orange->yellow->white)
       uint8_t idx = (uint8_t)map(n, 0, 255, EMBER_INDEX_MIN, EMBER_INDEX_MAX);
-
-      // Brightness controls intensity (keep mostly bright but modulated)
       uint8_t val = (uint8_t)map(n, 0, 255, VAL_MIN, VAL_MAX);
       val = qadd8(val, shimmer);
 
       CRGB c = ColorFromPalette(HeatColors_p, idx, val, LINEARBLEND);
 
-      // Subtle ember "pop"
       if (random8() < POP_PROB) {
         c.r = qadd8(c.r, POP_ADD_R);
         c.g = qadd8(c.g, POP_ADD_G);
       }
 
-      s_leds[i] = c;
+      const uint16_t i = (uint16_t)(v * BLOCK_SIZE);
+      fillBlock(i, c);
     }
 
-    blur1d(s_leds, NUM_LEDS, COLOR_BLUR_AMOUNT);
+    // Slightly less feather than party/spooky so ember "chunks" remain readable.
+    featherEdges(FEATHER_EMBER);
   }
 
-  // Folder 3: Christmas half pulse (left red, right green)
+  // Folder 3: Christmas half pulse (left red, right green) - UNCHANGED
   static inline void renderXmasHalfPulseStrip() {
     const uint8_t MIN_BRIGHT = 30;
     const uint8_t MAX_BRIGHT = 255;
@@ -143,20 +171,22 @@ namespace LedStrip {
     }
   }
 
-  // Folder 4: Spooky green/aqua marbling, brightness driven by external shared breath
-  static inline void renderSpookyStrip() {
+  // Folder 4: Spooky green/aqua marbling, brightness driven by external shared breath (block-rendered x4 + feather)
+  static inline void renderSpookyStrip_Block4() {
     s_spookyTime += 1;
 
-    uint8_t pulse = (s_externalSpookyBreath != 0xFF) ? s_externalSpookyBreath : 90;
+    const uint16_t virtualCount = (uint16_t)((NUM_LEDS + (BLOCK_SIZE - 1)) / BLOCK_SIZE);
 
-    // Avoid FastLED macro collisions like HUE_MAX.
+    // External shared breath MUST drive brightness (sync requirement).
+    const uint8_t pulse = (s_externalSpookyBreath != 0xFF) ? s_externalSpookyBreath : 90;
+
     const uint8_t SPOOKY_HUE_MIN = 70;
     const uint8_t SPOOKY_HUE_MAX = 120;
 
     const uint16_t NOISE_SCALE = 520;
 
-    for (uint16_t i = 0; i < NUM_LEDS; ++i) {
-      const uint16_t x = (uint16_t)(i * NOISE_SCALE);
+    for (uint16_t v = 0; v < virtualCount; ++v) {
+      const uint16_t x = (uint16_t)(v * NOISE_SCALE);
       const uint16_t z = (uint16_t)s_spookyTime;
 
       uint8_t n1 = inoise8(x, z);
@@ -167,8 +197,14 @@ namespace LedStrip {
       const uint8_t hue = (uint8_t)map(n, 0, 255, SPOOKY_HUE_MIN, SPOOKY_HUE_MAX);
       const uint8_t sat = (uint8_t)map(n2, 0, 255, 180, 255);
 
-      s_leds[i] = CHSV(hue, sat, pulse);
+      const CRGB c = CHSV(hue, sat, pulse);
+
+      const uint16_t i = (uint16_t)(v * BLOCK_SIZE);
+      fillBlock(i, c);
     }
+
+    // Soften hard steps between blocks while keeping banding.
+    featherEdges(FEATHER_SPOOKY);
   }
 
   // ------------------------------------------------------------
@@ -188,11 +224,11 @@ namespace LedStrip {
     s_lastFolder   = 255;
 
     s_partyTime    = 0;
-    s_spookyTime   = 0;
-    s_externalSpookyBreath = 0xFF;
-
     s_emberTime    = 0;
     s_emberDriftX  = 0;
+
+    s_spookyTime   = 0;
+    s_externalSpookyBreath = 0xFF;
 
     DBG_LED_STRIP2(F("[STRIP] Ready: "), NUM_LEDS);
   }
@@ -233,10 +269,10 @@ namespace LedStrip {
     s_lastFrameMs = now;
 
     switch (folder) {
-      case 1: renderPartyMarbleStrip(); break;
-      case 2: renderEmberGlowStrip(); break; // ember glow, SRAM-friendly
-      case 3: renderXmasHalfPulseStrip(); break;
-      case 4: renderSpookyStrip(); break;
+      case 1: renderPartyMarbleStrip_Block4(); break; // widened x4 + feathered
+      case 2: renderEmberGlowStrip_Block4();   break; // widened x4 + feathered
+      case 3: renderXmasHalfPulseStrip();      break; // unchanged
+      case 4: renderSpookyStrip_Block4();      break; // widened x4 + feathered (breath sync preserved)
       default: clear(); break;
     }
 
