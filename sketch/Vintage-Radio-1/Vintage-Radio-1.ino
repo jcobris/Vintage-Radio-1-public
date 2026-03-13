@@ -127,6 +127,10 @@ void setup() {
   LedMatrix::begin();
   LedStrip::begin();
 
+  // NEW: Limit WS2812 power draw to reduce 5V sag that can dim the dial LED under load.
+  // This scales LED output only when required to stay under the budget.
+  FastLED.setMaxPowerInVoltsAndMilliamps(5, 1200);
+
   DisplayLED::begin(Config::PIN_LED_DISPLAY);
 
   g_bt.begin(Config::BT_BAUD);
