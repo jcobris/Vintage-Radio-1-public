@@ -18,24 +18,23 @@
 static const uint8_t MATRIX_BRIGHT_NORMAL = 200;
 static const uint8_t MATRIX_BRIGHT_ALT    = 100;
 
-// Dial / tuning illumination LED
-static const uint8_t DIAL_SOLID_NORMAL = 100;
-static const uint8_t DIAL_SOLID_ALT    = 60;
+// Dial / tuning illumination LED (PWM)
+static const uint8_t DIAL_SOLID_NORMAL = 70;
+static const uint8_t DIAL_SOLID_ALT    = 30;
 
-// Pulse behaviour (folder 4)
-static const uint8_t DIAL_PULSE_MIN_NORMAL = 60;
-static const uint8_t DIAL_PULSE_MAX_NORMAL = 120;
+// Pulse behaviour (folder 4) - shared breath for matrix + dial
+static const uint8_t DIAL_PULSE_MIN_NORMAL = 30;
+static const uint8_t DIAL_PULSE_MAX_NORMAL = 60;
 static const uint8_t DIAL_PULSE_MIN_ALT    = 10;
-static const uint8_t DIAL_PULSE_MAX_ALT    = 60;
-static const uint16_t DIAL_PULSE_TICK_MS   = 18;
-static const uint8_t  DIAL_PULSE_BPM       = 12;
+static const uint8_t DIAL_PULSE_MAX_ALT    = 30;
+static const uint8_t DIAL_PULSE_BPM        = 12;
 
 // Flicker behaviour (between stations)
 static const uint8_t  DIAL_FLICKER_MIN_NORMAL = 30;
-static const uint8_t  DIAL_FLICKER_MAX_NORMAL = 120;
+static const uint8_t  DIAL_FLICKER_MAX_NORMAL = 600;
 static const uint8_t  DIAL_FLICKER_MIN_ALT    = 10;
-static const uint8_t  DIAL_FLICKER_MAX_ALT    = 70;
-static const uint16_t DIAL_FLICKER_TICK_MS    = 40;
+static const uint8_t  DIAL_FLICKER_MAX_ALT    = 30;
+static const uint16_t DIAL_FLICKER_TICK_MS    = 10;
 
 // ============================================================
 // Display mode (3‑way switch)
@@ -130,7 +129,7 @@ void setup() {
 
   MP3::init();
 
-  // Initial matrix brightness
+  // Initial matrix brightness (single source of truth is this sketch)
   FastLED.setBrightness(MATRIX_BRIGHT_NORMAL);
 
   DBG_BOOT(F("[BOOT] System ready"));
@@ -235,26 +234,32 @@ void loop() {
   }
 
   // ----------------------------------------------------------
-  // Dial LED (dimmed in ALT)
+  // Dial LED + Matrix Folder 4 shared breathing (dimmed in ALT)
   // ----------------------------------------------------------
   if (!lightsOn) {
     // Matrix off: dial forced solid ON
     DisplayLED::setSolid(altMode ? DIAL_SOLID_ALT : DIAL_SOLID_NORMAL);
+    LedMatrix::setSpookyBreath(0xFF); // release override
   } else if (g_folder == 99) {
     DisplayLED::flickerRandomTick(
       altMode ? DIAL_FLICKER_MIN_ALT : DIAL_FLICKER_MIN_NORMAL,
       altMode ? DIAL_FLICKER_MAX_ALT : DIAL_FLICKER_MAX_NORMAL,
       DIAL_FLICKER_TICK_MS
     );
+    LedMatrix::setSpookyBreath(0xFF); // release override
   } else if (g_folder == 4) {
-    DisplayLED::pulseSineTick(
+    // One shared breath value: matrix + dial are perfectly in sync
+    const uint8_t sharedBreath = beatsin8(
       DIAL_PULSE_BPM,
       altMode ? DIAL_PULSE_MIN_ALT : DIAL_PULSE_MIN_NORMAL,
-      altMode ? DIAL_PULSE_MAX_ALT : DIAL_PULSE_MAX_NORMAL,
-      DIAL_PULSE_TICK_MS
+      altMode ? DIAL_PULSE_MAX_ALT : DIAL_PULSE_MAX_NORMAL
     );
+
+    DisplayLED::setSolid(sharedBreath);
+    LedMatrix::setSpookyBreath(sharedBreath);
   } else {
     DisplayLED::setSolid(altMode ? DIAL_SOLID_ALT : DIAL_SOLID_NORMAL);
+    LedMatrix::setSpookyBreath(0xFF); // release override
   }
 
   // ----------------------------------------------------------

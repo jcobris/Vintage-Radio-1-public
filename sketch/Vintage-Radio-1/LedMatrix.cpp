@@ -3,6 +3,7 @@
 #include "LedMatrix.h"
 
 namespace LedMatrix {
+
   CRGB leds[NUM_LEDS];
 
   static uint32_t lastFrameMs = 0;
@@ -15,7 +16,11 @@ namespace LedMatrix {
   // Folder 4
   static uint32_t spookyTime = 0;
 
-  // Fixed-point smoothed pulse for spooky breathing:
+  // External breath support for folder 4 sync
+  // 0xFF = not set / use internal breathing
+  static uint8_t s_externalSpookyBreath = 0xFF;
+
+  // Internal fixed-point smoothed pulse for spooky breathing fallback:
   // store 8.8 fixed point (upper 8 bits = integer 0..255, lower 8 bits = fraction)
   static uint16_t s_spookyPulseQ8_8 = 0;
 
@@ -34,10 +39,11 @@ namespace LedMatrix {
     uint16_t acc = (uint16_t)self * (255 - neighborWeight) + (uint16_t)neighbor * neighborWeight;
     return (uint8_t)(acc / 255);
   }
+
   static inline uint8_t mix8(uint8_t a, uint8_t b, uint8_t w) { return mixWeighted(a, b, w); }
 
-  // Local 16-bit triangle wave helper (FastLED in your build lacks triwave16()).
-  // Input:  0..65535 phase
+  // Local 16-bit triangle wave helper.
+  // Input: 0..65535 phase
   // Output: 0..65534 triangle wave (symmetric, constant slope)
   static inline uint16_t triwave16_local(uint16_t phase) {
     if (phase < 32768) {
@@ -46,7 +52,12 @@ namespace LedMatrix {
       return (uint16_t)((uint32_t)(65535U - phase) * 2U);
     }
   }
-}
+
+  void setSpookyBreath(uint8_t pulse) {
+    s_externalSpookyBreath = pulse;
+  }
+
+} // namespace LedMatrix
 
 using namespace LedMatrix;
 
@@ -55,9 +66,11 @@ using namespace LedMatrix;
 // ------------------------------------------------------------
 void LedMatrix::begin() {
   FastLED.addLeds<WS2812B, DATA_PIN, COLOR_ORDER>(leds, NUM_LEDS);
-  FastLED.setBrightness(BRIGHTNESS);
+
+  // Do NOT set brightness here: the main sketch owns FastLED.setBrightness().
   clear();
   FastLED.show();
+
   lastFrameMs = millis();
   s_isOffLatched = false;
 }
@@ -71,6 +84,7 @@ void LedMatrix::clear() {
 // ------------------------------------------------------------
 static void renderPartyMarble() {
   partyTime += LedMatrix::PARTY_TIME_NOISE_SPEED;
+
   const uint8_t swirlA = beatsin8(7, 0, 255);
   const uint8_t swirlB = beatsin8(13, 0, 255);
 
@@ -79,6 +93,7 @@ static void renderPartyMarble() {
     uint16_t z = (uint16_t)(partyTime + (swirlA / 2) + (swirlB / 3));
     uint8_t n = inoise8((uint16_t)(x & 0xFFFF), z);
     uint8_t index = qadd8(n, 30);
+
     CRGB color = ColorFromPalette(LedMatrix::partyPalette, index, 255);
 
     uint16_t base = blockBaseIndex(col);
@@ -92,18 +107,18 @@ static void renderFireColumns() {
     fireHeat[col] = (fireHeat[col] > cooldown) ? (fireHeat[col] - cooldown) : 0;
   }
 
-  sparkNoiseTime += FIRE_SPARK_NOISE_SPEED;
+  sparkNoiseTime  += FIRE_SPARK_NOISE_SPEED;
   sparkNoiseTime2 += FIRE_SPARK_NOISE_SPEED2;
-  sparkDriftX += (int32_t)FIRE_SPARK_DRIFT_SPEED;
+  sparkDriftX     += (int32_t)FIRE_SPARK_DRIFT_SPEED;
 
   for (uint8_t col = 0; col < 32; ++col) {
-    uint16_t x1 = (uint16_t)(col * FIRE_SPARK_NOISE_SCALE + (sparkDriftX & 0xFFFF));
+    uint16_t x1 = (uint16_t)(col * FIRE_SPARK_NOISE_SCALE  + (sparkDriftX & 0xFFFF));
     uint16_t x2 = (uint16_t)(col * FIRE_SPARK_NOISE_SCALE2 - ((sparkDriftX / 2) & 0xFFFF));
     uint8_t n1 = inoise8(x1, (uint16_t)sparkNoiseTime);
     uint8_t n2 = inoise8(x2, (uint16_t)sparkNoiseTime2);
     uint8_t nCombined = mix8(n1, n2, FIRE_SPARK_OCTAVE_BLEND);
-    uint8_t prob = (uint8_t)map(nCombined, 0, 255, FIRE_SPARK_MIN_PROB, FIRE_SPARK_MAX_PROB);
 
+    uint8_t prob = (uint8_t)map(nCombined, 0, 255, FIRE_SPARK_MIN_PROB, FIRE_SPARK_MAX_PROB);
     if (random8() < prob) {
       fireHeat[col] = qadd8(
         fireHeat[col],
@@ -168,38 +183,44 @@ static void renderSpookyColumns() {
   spookyTime += SPOOKY_TIME_NOISE_SPEED;
 
   // ----------------------------------------------------------
-  // Breathing: 16-bit TRIANGLE + fixed-point smoothing (Q8.8)
-  // targetQ8_8 computed directly from tri16 to avoid endpoint "stickiness"
+  // Breathing pulse:
+  // Prefer external (shared) breath value if provided.
+  // Otherwise fall back to internal triangle+smoothing.
   // ----------------------------------------------------------
-  const uint8_t  PULSE_MIN = 20;
-  const uint8_t  PULSE_MAX = 150;
-  const uint16_t rangeQ8_8 = (uint16_t)(PULSE_MAX - PULSE_MIN) << 8;
+  uint8_t pulse = 0;
 
-  const uint16_t phase16 = beat16(SPOOKY_PULSE_BPM);
-  const uint16_t tri16   = triwave16_local(phase16);
+  if (s_externalSpookyBreath != 0xFF) {
+    pulse = s_externalSpookyBreath;
+  } else {
+    // Internal fallback behaviour (as originally implemented)
+    const uint8_t SPOOKY_PULSE_BPM = 9;
+    const uint8_t PULSE_MIN = 20;
+    const uint8_t PULSE_MAX = 150;
 
-  const uint16_t targetQ8_8 =
-    (uint16_t)(PULSE_MIN << 8) + (uint16_t)(((uint32_t)tri16 * (uint32_t)rangeQ8_8) >> 16);
+    const uint16_t rangeQ8_8 = (uint16_t)(PULSE_MAX - PULSE_MIN) << 8;
+    const uint16_t phase16 = beat16(SPOOKY_PULSE_BPM);
+    const uint16_t tri16 = triwave16_local(phase16);
+    const uint16_t targetQ8_8 =
+      (uint16_t)(PULSE_MIN << 8) + (uint16_t)(((uint32_t)tri16 * (uint32_t)rangeQ8_8) >> 16);
 
-  if (s_spookyPulseQ8_8 == 0) s_spookyPulseQ8_8 = targetQ8_8;
+    if (s_spookyPulseQ8_8 == 0) s_spookyPulseQ8_8 = targetQ8_8;
 
-  // Smooth: alpha = 1/16
-  int16_t diff = (int16_t)(targetQ8_8 - s_spookyPulseQ8_8);
-  s_spookyPulseQ8_8 = (uint16_t)(s_spookyPulseQ8_8 + (diff >> 4));
-
-  const uint8_t pulse = (uint8_t)(s_spookyPulseQ8_8 >> 8);
+    // Smooth: alpha = 1/16
+    int16_t diff = (int16_t)(targetQ8_8 - s_spookyPulseQ8_8);
+    s_spookyPulseQ8_8 = (uint16_t)(s_spookyPulseQ8_8 + (diff >> 4));
+    pulse = (uint8_t)(s_spookyPulseQ8_8 >> 8);
+  }
 
   // ----------------------------------------------------------
   // Purple edges: 2 columns per side
   // ----------------------------------------------------------
   const uint8_t EDGE_W = 2;
-
   uint8_t edgeV = scale8(pulse, 208);
   if (edgeV < 45) edgeV = 45;
   const CRGB edgePurple = CHSV(205, 255, edgeV);
 
   // ----------------------------------------------------------
-  // Hue-contrast marbling (colour-good settings)
+  // Hue-contrast marbling
   // ----------------------------------------------------------
   const uint8_t SPOOKY_HUE_MIN = 60;
   const uint8_t SPOOKY_HUE_MAX = 124;
@@ -210,7 +231,7 @@ static void renderSpookyColumns() {
 
     uint8_t n1 = inoise8(x, z);
     uint8_t n2 = inoise8((uint16_t)(x >> 1), (uint16_t)(z + 137));
-    uint8_t n  = lerp8by8(n1, n2, 96);
+    uint8_t n = lerp8by8(n1, n2, 96);
     n = ease8InOutQuad(n);
 
     uint8_t hue = (uint8_t)map(n, 0, 255, SPOOKY_HUE_MIN, SPOOKY_HUE_MAX);

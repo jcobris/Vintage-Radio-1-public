@@ -9,9 +9,10 @@
 // LedMatrix::update() calls FastLED.show() which updates ALL controllers.
 
 namespace LedStrip {
+
   // Hardware
-  static const uint8_t  DATA_PIN    = Config::PIN_STRIP_DATA;
-  static const uint16_t NUM_LEDS    = Config::STRIP_NUM_LEDS;
+  static const uint8_t  DATA_PIN = Config::PIN_STRIP_DATA;
+  static const uint16_t NUM_LEDS = Config::STRIP_NUM_LEDS;
   static const EOrder   COLOR_ORDER = GRB;
 
   // Frame pacing
@@ -22,9 +23,9 @@ namespace LedStrip {
 
   // State
   static uint32_t s_lastFrameMs = 0;
-  static bool     s_isOffLatched = false;
-  static uint8_t  s_baseHue = 0;
-  static uint8_t  s_lastFolder = 255;
+  static bool s_isOffLatched = false;
+  static uint8_t s_baseHue = 0;
+  static uint8_t s_lastFolder = 255;
 
   void clear() {
     fill_solid(s_leds, NUM_LEDS, CRGB::Black);
@@ -88,4 +89,5 @@ namespace LedStrip {
     // IMPORTANT: Do not call FastLED.show() here.
     // LedMatrix::update() already calls FastLED.show() and will output both controllers.
   }
+
 } // namespace LedStrip

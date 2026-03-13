@@ -44,7 +44,7 @@ namespace {
   const uint32_t FOLDER2_LOWER_US = 52;
   const uint32_t FOLDER2_UPPER_US = 84;
 
-  const uint32_t FOLDER1_LOWER_US = 94;
+  const uint32_t FOLDER1_LOWER_US = 112;
 
   // Stability requirements
   const uint8_t STABLE_COUNT_FOLDER = 4;
