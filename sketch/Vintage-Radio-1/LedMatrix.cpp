@@ -1,17 +1,13 @@
 
 // LedMatrix.cpp
 #include "LedMatrix.h"
-
 namespace LedMatrix {
-
   CRGB leds[NUM_LEDS];
-
   static uint32_t lastFrameMs = 0;
   static bool s_isOffLatched = false;
 
   // Folder 1
-  static CRGBPalette16 partyPalette = PartyColors_p;
-  static uint32_t partyTime = 0;
+  static uint32_t partyTime = 0;   // removed CRGBPalette16 copy to save SRAM
 
   // Folder 4
   static uint32_t spookyTime = 0;
@@ -39,12 +35,8 @@ namespace LedMatrix {
     uint16_t acc = (uint16_t)self * (255 - neighborWeight) + (uint16_t)neighbor * neighborWeight;
     return (uint8_t)(acc / 255);
   }
-
   static inline uint8_t mix8(uint8_t a, uint8_t b, uint8_t w) { return mixWeighted(a, b, w); }
 
-  // Local 16-bit triangle wave helper.
-  // Input: 0..65535 phase
-  // Output: 0..65534 triangle wave (symmetric, constant slope)
   static inline uint16_t triwave16_local(uint16_t phase) {
     if (phase < 32768) {
       return (uint16_t)((uint32_t)phase * 2U);
@@ -56,7 +48,6 @@ namespace LedMatrix {
   void setSpookyBreath(uint8_t pulse) {
     s_externalSpookyBreath = pulse;
   }
-
 } // namespace LedMatrix
 
 using namespace LedMatrix;
@@ -66,15 +57,11 @@ using namespace LedMatrix;
 // ------------------------------------------------------------
 void LedMatrix::begin() {
   FastLED.addLeds<WS2812B, DATA_PIN, COLOR_ORDER>(leds, NUM_LEDS);
-
-  // Do NOT set brightness here: the main sketch owns FastLED.setBrightness().
   clear();
   FastLED.show();
-
   lastFrameMs = millis();
   s_isOffLatched = false;
 }
-
 void LedMatrix::clear() {
   fill_solid(leds, NUM_LEDS, CRGB::Black);
 }
@@ -84,7 +71,6 @@ void LedMatrix::clear() {
 // ------------------------------------------------------------
 static void renderPartyMarble() {
   partyTime += LedMatrix::PARTY_TIME_NOISE_SPEED;
-
   const uint8_t swirlA = beatsin8(7, 0, 255);
   const uint8_t swirlB = beatsin8(13, 0, 255);
 
@@ -94,7 +80,8 @@ static void renderPartyMarble() {
     uint8_t n = inoise8((uint16_t)(x & 0xFFFF), z);
     uint8_t index = qadd8(n, 30);
 
-    CRGB color = ColorFromPalette(LedMatrix::partyPalette, index, 255);
+    // Use PartyColors_p directly (no SRAM palette copy).
+    CRGB color = ColorFromPalette(PartyColors_p, index, 255);
 
     uint16_t base = blockBaseIndex(col);
     for (uint8_t i = 0; i < 8; ++i) leds[base + i] = color;
@@ -107,12 +94,12 @@ static void renderFireColumns() {
     fireHeat[col] = (fireHeat[col] > cooldown) ? (fireHeat[col] - cooldown) : 0;
   }
 
-  sparkNoiseTime  += FIRE_SPARK_NOISE_SPEED;
+  sparkNoiseTime += FIRE_SPARK_NOISE_SPEED;
   sparkNoiseTime2 += FIRE_SPARK_NOISE_SPEED2;
-  sparkDriftX     += (int32_t)FIRE_SPARK_DRIFT_SPEED;
+  sparkDriftX += (int32_t)FIRE_SPARK_DRIFT_SPEED;
 
   for (uint8_t col = 0; col < 32; ++col) {
-    uint16_t x1 = (uint16_t)(col * FIRE_SPARK_NOISE_SCALE  + (sparkDriftX & 0xFFFF));
+    uint16_t x1 = (uint16_t)(col * FIRE_SPARK_NOISE_SCALE + (sparkDriftX & 0xFFFF));
     uint16_t x2 = (uint16_t)(col * FIRE_SPARK_NOISE_SCALE2 - ((sparkDriftX / 2) & 0xFFFF));
     uint8_t n1 = inoise8(x1, (uint16_t)sparkNoiseTime);
     uint8_t n2 = inoise8(x2, (uint16_t)sparkNoiseTime2);
@@ -179,20 +166,12 @@ static void renderXmasColumns() {
 }
 
 static void renderSpookyColumns() {
-  // Advance time for marbling field
   spookyTime += SPOOKY_TIME_NOISE_SPEED;
 
-  // ----------------------------------------------------------
-  // Breathing pulse:
-  // Prefer external (shared) breath value if provided.
-  // Otherwise fall back to internal triangle+smoothing.
-  // ----------------------------------------------------------
   uint8_t pulse = 0;
-
   if (s_externalSpookyBreath != 0xFF) {
     pulse = s_externalSpookyBreath;
   } else {
-    // Internal fallback behaviour (as originally implemented)
     const uint8_t SPOOKY_PULSE_BPM = 9;
     const uint8_t PULSE_MIN = 20;
     const uint8_t PULSE_MAX = 150;
@@ -204,24 +183,16 @@ static void renderSpookyColumns() {
       (uint16_t)(PULSE_MIN << 8) + (uint16_t)(((uint32_t)tri16 * (uint32_t)rangeQ8_8) >> 16);
 
     if (s_spookyPulseQ8_8 == 0) s_spookyPulseQ8_8 = targetQ8_8;
-
-    // Smooth: alpha = 1/16
     int16_t diff = (int16_t)(targetQ8_8 - s_spookyPulseQ8_8);
     s_spookyPulseQ8_8 = (uint16_t)(s_spookyPulseQ8_8 + (diff >> 4));
     pulse = (uint8_t)(s_spookyPulseQ8_8 >> 8);
   }
 
-  // ----------------------------------------------------------
-  // Purple edges: 2 columns per side
-  // ----------------------------------------------------------
   const uint8_t EDGE_W = 2;
   uint8_t edgeV = scale8(pulse, 208);
   if (edgeV < 45) edgeV = 45;
   const CRGB edgePurple = CHSV(205, 255, edgeV);
 
-  // ----------------------------------------------------------
-  // Hue-contrast marbling
-  // ----------------------------------------------------------
   const uint8_t SPOOKY_HUE_MIN = 60;
   const uint8_t SPOOKY_HUE_MAX = 124;
 
@@ -236,10 +207,8 @@ static void renderSpookyColumns() {
 
     uint8_t hue = (uint8_t)map(n, 0, 255, SPOOKY_HUE_MIN, SPOOKY_HUE_MAX);
     uint8_t sat = (uint8_t)map(n2, 0, 255, 180, 255);
-
     CRGB color = CHSV(hue, sat, pulse);
 
-    // Edges: solid purple columns (2 per side)
     if (col < EDGE_W || col >= (32 - EDGE_W)) {
       color = edgePurple;
     }

@@ -251,6 +251,7 @@ void loop() {
     // for higher apparent brightness when WS2812 load is removed)
     DisplayLED::setSolid(altMode ? DIAL_SOLID_MATRIX_OFF_ALT : DIAL_SOLID_MATRIX_OFF_NORMAL);
     LedMatrix::setSpookyBreath(0xFF); // release override
+    LedStrip::setSpookyBreath(0xFF);  // release override (NEW)
   } else if (g_folder == 99) {
     DisplayLED::flickerRandomTick(
       altMode ? DIAL_FLICKER_MIN_ALT : DIAL_FLICKER_MIN_NORMAL,
@@ -258,8 +259,9 @@ void loop() {
       DIAL_FLICKER_TICK_MS
     );
     LedMatrix::setSpookyBreath(0xFF); // release override
+    LedStrip::setSpookyBreath(0xFF);  // release override (NEW)
   } else if (g_folder == 4) {
-    // One shared breath value: matrix + dial are perfectly in sync
+    // One shared breath value: matrix + dial (and now strip) are perfectly in sync
     const uint8_t sharedBreath = beatsin8(
       DIAL_PULSE_BPM,
       altMode ? DIAL_PULSE_MIN_ALT : DIAL_PULSE_MIN_NORMAL,
@@ -268,9 +270,11 @@ void loop() {
 
     DisplayLED::setSolid(sharedBreath);
     LedMatrix::setSpookyBreath(sharedBreath);
+    LedStrip::setSpookyBreath(sharedBreath); // NEW: strip uses exact same shared value
   } else {
     DisplayLED::setSolid(altMode ? DIAL_SOLID_ALT : DIAL_SOLID_NORMAL);
     LedMatrix::setSpookyBreath(0xFF); // release override
+    LedStrip::setSpookyBreath(0xFF);  // release override (NEW)
   }
 
   // ----------------------------------------------------------

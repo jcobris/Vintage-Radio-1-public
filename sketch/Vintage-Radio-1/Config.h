@@ -3,19 +3,18 @@
 #pragma once
 #include <Arduino.h>
 /*
- ============================================================
- Project Configuration (Single Source of Truth)
- ============================================================
- This header defines:
-  - Compile-time debug macros (global + per-module toggles)
-  - Pin assignments (Arduino Nano / ATmega328P)
-  - Baud rates for SoftwareSerial UARTs (BT + MP3)
-  - Small constants used across modules
-  - Compile-time pin conflict guards (static_assert)
-
- Notes:
-  - Nano has 2KB SRAM; avoid dynamic allocation and large buffers.
-  - static_assert guards are compile-time only (no runtime SRAM cost).
+============================================================
+Project Configuration (Single Source of Truth)
+============================================================
+This header defines:
+ - Compile-time debug macros (global + per-module toggles)
+ - Pin assignments (Arduino Nano / ATmega328P)
+ - Baud rates for SoftwareSerial UARTs (BT + MP3)
+ - Small constants used across modules
+ - Compile-time pin conflict guards (static_assert)
+Notes:
+ - Nano has 2KB SRAM; avoid dynamic allocation and large buffers.
+ - static_assert guards are compile-time only (no runtime SRAM cost).
 */
 
 // ============================================================
@@ -27,7 +26,6 @@
 #ifndef DEBUG
  #define DEBUG 0
 #endif
-
 #if DEBUG == 1
  #define debug(x) Serial.print(x)
  #define debugln(x) Serial.println(x)
@@ -44,47 +42,36 @@
 #ifndef BOOT_DEBUG
  #define BOOT_DEBUG 0
 #endif
-
 #ifndef SRC_DEBUG
  #define SRC_DEBUG 0
 #endif
-
 #ifndef TUNING_DEBUG
  #define TUNING_DEBUG 0
 #endif
-
 #ifndef TUNING_STREAM_DEBUG
  #define TUNING_STREAM_DEBUG 0 // VERY noisy continuous timing output
 #endif
-
 #ifndef TUNING_VERBOSE_DEBUG
  #define TUNING_VERBOSE_DEBUG 0 // samples, hit counts, extra detail
 #endif
-
 #ifndef MP3_DEBUG
  #define MP3_DEBUG 0
 #endif
-
 #ifndef MP3_FRAME_DEBUG
  #define MP3_FRAME_DEBUG 0 // TX frame hex dumps (noisy)
 #endif
-
 #ifndef MP3_RX_DEBUG
  #define MP3_RX_DEBUG 0 // RX byte dumps (noisy)
 #endif
-
 #ifndef BT_DEBUG
  #define BT_DEBUG 0
 #endif
-
 #ifndef LED_STRIP_DEBUG
  #define LED_STRIP_DEBUG 0
 #endif
-
 #ifndef LED_MATRIX_DEBUG
  #define LED_MATRIX_DEBUG 0
 #endif
-
 #ifndef LED_DIAL_DEBUG
  #define LED_DIAL_DEBUG 0
 #endif
@@ -196,10 +183,9 @@
 // Pinout + constants (Arduino Nano / ATmega328P)
 // ============================================================
 namespace Config {
-
   // Source detect input (physical source select switch)
   // Pin mode: INPUT_PULLUP
-  // LOW  -> MP3 selected
+  // LOW -> MP3 selected
   // HIGH -> Bluetooth selected
   constexpr uint8_t PIN_SOURCE_DETECT = 2; // D2
 
@@ -231,9 +217,11 @@ namespace Config {
   // Next-track pushbutton (active-low to GND)
   constexpr uint8_t PIN_NEXT_TRACK_BUTTON = 13; // D13
 
-  // WS2812B LED strip (64 LEDs) on A0 (data)
-  constexpr uint8_t  PIN_STRIP_DATA = A0; // A0
-  constexpr uint16_t STRIP_NUM_LEDS = 64;
+  // WS2812B LED strip on A0 (data)
+  constexpr uint8_t PIN_STRIP_DATA = A0; // A0
+
+  // UPDATED: 128 LEDs in the strip
+  constexpr uint16_t STRIP_NUM_LEDS = 128;
 }
 
 // ============================================================
@@ -256,40 +244,40 @@ CONFIG_ASSERT_NOT_SERIAL_PINS(Config::PIN_STRIP_DATA, "Invalid pin: strip data m
 // ---- Dial LED vs serial subsystems ----
 CONFIG_ASSERT_PIN_DISTINCT(Config::PIN_LED_DISPLAY, Config::PIN_MP3_TX, "Pin conflict: dial LED pin conflicts with MP3 TX.");
 CONFIG_ASSERT_PIN_DISTINCT(Config::PIN_LED_DISPLAY, Config::PIN_MP3_RX, "Pin conflict: dial LED pin conflicts with MP3 RX.");
-CONFIG_ASSERT_PIN_DISTINCT(Config::PIN_LED_DISPLAY, Config::PIN_BT_TX, "Pin conflict: dial LED pin conflicts with BT TX.");
-CONFIG_ASSERT_PIN_DISTINCT(Config::PIN_LED_DISPLAY, Config::PIN_BT_RX, "Pin conflict: dial LED pin conflicts with BT RX.");
+CONFIG_ASSERT_PIN_DISTINCT(Config::PIN_LED_DISPLAY, Config::PIN_BT_TX,  "Pin conflict: dial LED pin conflicts with BT TX.");
+CONFIG_ASSERT_PIN_DISTINCT(Config::PIN_LED_DISPLAY, Config::PIN_BT_RX,  "Pin conflict: dial LED pin conflicts with BT RX.");
 
 // ---- Matrix vs serial subsystems ----
 CONFIG_ASSERT_PIN_DISTINCT(Config::PIN_MATRIX_DATA, Config::PIN_MP3_TX, "Pin conflict: matrix pin conflicts with MP3 TX.");
 CONFIG_ASSERT_PIN_DISTINCT(Config::PIN_MATRIX_DATA, Config::PIN_MP3_RX, "Pin conflict: matrix pin conflicts with MP3 RX.");
-CONFIG_ASSERT_PIN_DISTINCT(Config::PIN_MATRIX_DATA, Config::PIN_BT_TX, "Pin conflict: matrix pin conflicts with BT TX.");
-CONFIG_ASSERT_PIN_DISTINCT(Config::PIN_MATRIX_DATA, Config::PIN_BT_RX, "Pin conflict: matrix pin conflicts with BT RX.");
+CONFIG_ASSERT_PIN_DISTINCT(Config::PIN_MATRIX_DATA, Config::PIN_BT_TX,  "Pin conflict: matrix pin conflicts with BT TX.");
+CONFIG_ASSERT_PIN_DISTINCT(Config::PIN_MATRIX_DATA, Config::PIN_BT_RX,  "Pin conflict: matrix pin conflicts with BT RX.");
 
 // ---- Matrix vs dial LED ----
 CONFIG_ASSERT_PIN_DISTINCT(Config::PIN_MATRIX_DATA, Config::PIN_LED_DISPLAY, "Pin conflict: matrix and dial LED pins must differ.");
 
 // ---- Next-track button pin guards ----
-CONFIG_ASSERT_PIN_DISTINCT(Config::PIN_NEXT_TRACK_BUTTON, Config::PIN_SOURCE_DETECT, "Pin conflict: next-track button conflicts with source detect.");
+CONFIG_ASSERT_PIN_DISTINCT(Config::PIN_NEXT_TRACK_BUTTON, Config::PIN_SOURCE_DETECT,       "Pin conflict: next-track button conflicts with source detect.");
 CONFIG_ASSERT_PIN_DISTINCT(Config::PIN_NEXT_TRACK_BUTTON, Config::PIN_DISPLAY_MODE_NORMAL, "Pin conflict: next-track button conflicts with display mode NORMAL.");
-CONFIG_ASSERT_PIN_DISTINCT(Config::PIN_NEXT_TRACK_BUTTON, Config::PIN_DISPLAY_MODE_ALT, "Pin conflict: next-track button conflicts with display mode ALT.");
-CONFIG_ASSERT_PIN_DISTINCT(Config::PIN_NEXT_TRACK_BUTTON, Config::PIN_DISPLAY_MODE_OFF, "Pin conflict: next-track button conflicts with display mode OFF.");
-CONFIG_ASSERT_PIN_DISTINCT(Config::PIN_NEXT_TRACK_BUTTON, Config::PIN_BT_RX, "Pin conflict: next-track button conflicts with BT RX.");
-CONFIG_ASSERT_PIN_DISTINCT(Config::PIN_NEXT_TRACK_BUTTON, Config::PIN_BT_TX, "Pin conflict: next-track button conflicts with BT TX.");
-CONFIG_ASSERT_PIN_DISTINCT(Config::PIN_NEXT_TRACK_BUTTON, Config::PIN_MP3_RX, "Pin conflict: next-track button conflicts with MP3 RX.");
-CONFIG_ASSERT_PIN_DISTINCT(Config::PIN_NEXT_TRACK_BUTTON, Config::PIN_MP3_TX, "Pin conflict: next-track button conflicts with MP3 TX.");
-CONFIG_ASSERT_PIN_DISTINCT(Config::PIN_NEXT_TRACK_BUTTON, Config::PIN_TUNING_INPUT, "Pin conflict: next-track button conflicts with tuning input.");
-CONFIG_ASSERT_PIN_DISTINCT(Config::PIN_NEXT_TRACK_BUTTON, Config::PIN_LED_DISPLAY, "Pin conflict: next-track button conflicts with dial LED.");
-CONFIG_ASSERT_PIN_DISTINCT(Config::PIN_NEXT_TRACK_BUTTON, Config::PIN_MATRIX_DATA, "Pin conflict: next-track button conflicts with matrix data.");
-CONFIG_ASSERT_PIN_DISTINCT(Config::PIN_NEXT_TRACK_BUTTON, Config::PIN_STRIP_DATA, "Pin conflict: next-track button conflicts with strip data.");
+CONFIG_ASSERT_PIN_DISTINCT(Config::PIN_NEXT_TRACK_BUTTON, Config::PIN_DISPLAY_MODE_ALT,    "Pin conflict: next-track button conflicts with display mode ALT.");
+CONFIG_ASSERT_PIN_DISTINCT(Config::PIN_NEXT_TRACK_BUTTON, Config::PIN_DISPLAY_MODE_OFF,    "Pin conflict: next-track button conflicts with display mode OFF.");
+CONFIG_ASSERT_PIN_DISTINCT(Config::PIN_NEXT_TRACK_BUTTON, Config::PIN_BT_RX,               "Pin conflict: next-track button conflicts with BT RX.");
+CONFIG_ASSERT_PIN_DISTINCT(Config::PIN_NEXT_TRACK_BUTTON, Config::PIN_BT_TX,               "Pin conflict: next-track button conflicts with BT TX.");
+CONFIG_ASSERT_PIN_DISTINCT(Config::PIN_NEXT_TRACK_BUTTON, Config::PIN_MP3_RX,              "Pin conflict: next-track button conflicts with MP3 RX.");
+CONFIG_ASSERT_PIN_DISTINCT(Config::PIN_NEXT_TRACK_BUTTON, Config::PIN_MP3_TX,              "Pin conflict: next-track button conflicts with MP3 TX.");
+CONFIG_ASSERT_PIN_DISTINCT(Config::PIN_NEXT_TRACK_BUTTON, Config::PIN_TUNING_INPUT,        "Pin conflict: next-track button conflicts with tuning input.");
+CONFIG_ASSERT_PIN_DISTINCT(Config::PIN_NEXT_TRACK_BUTTON, Config::PIN_LED_DISPLAY,         "Pin conflict: next-track button conflicts with dial LED.");
+CONFIG_ASSERT_PIN_DISTINCT(Config::PIN_NEXT_TRACK_BUTTON, Config::PIN_MATRIX_DATA,         "Pin conflict: next-track button conflicts with matrix data.");
+CONFIG_ASSERT_PIN_DISTINCT(Config::PIN_NEXT_TRACK_BUTTON, Config::PIN_STRIP_DATA,          "Pin conflict: next-track button conflicts with strip data.");
 
 // ---- Strip vs other subsystems ----
 CONFIG_ASSERT_PIN_DISTINCT(Config::PIN_STRIP_DATA, Config::PIN_MATRIX_DATA, "Pin conflict: strip data conflicts with matrix data.");
 CONFIG_ASSERT_PIN_DISTINCT(Config::PIN_STRIP_DATA, Config::PIN_LED_DISPLAY, "Pin conflict: strip data conflicts with dial LED.");
-CONFIG_ASSERT_PIN_DISTINCT(Config::PIN_STRIP_DATA, Config::PIN_MP3_RX, "Pin conflict: strip data conflicts with MP3 RX.");
-CONFIG_ASSERT_PIN_DISTINCT(Config::PIN_STRIP_DATA, Config::PIN_MP3_TX, "Pin conflict: strip data conflicts with MP3 TX.");
-CONFIG_ASSERT_PIN_DISTINCT(Config::PIN_STRIP_DATA, Config::PIN_BT_RX, "Pin conflict: strip data conflicts with BT RX.");
-CONFIG_ASSERT_PIN_DISTINCT(Config::PIN_STRIP_DATA, Config::PIN_BT_TX, "Pin conflict: strip data conflicts with BT TX.");
-CONFIG_ASSERT_PIN_DISTINCT(Config::PIN_STRIP_DATA, Config::PIN_SOURCE_DETECT, "Pin conflict: strip data conflicts with source detect.");
+CONFIG_ASSERT_PIN_DISTINCT(Config::PIN_STRIP_DATA, Config::PIN_MP3_RX,      "Pin conflict: strip data conflicts with MP3 RX.");
+CONFIG_ASSERT_PIN_DISTINCT(Config::PIN_STRIP_DATA, Config::PIN_MP3_TX,      "Pin conflict: strip data conflicts with MP3 TX.");
+CONFIG_ASSERT_PIN_DISTINCT(Config::PIN_STRIP_DATA, Config::PIN_BT_RX,       "Pin conflict: strip data conflicts with BT RX.");
+CONFIG_ASSERT_PIN_DISTINCT(Config::PIN_STRIP_DATA, Config::PIN_BT_TX,       "Pin conflict: strip data conflicts with BT TX.");
+CONFIG_ASSERT_PIN_DISTINCT(Config::PIN_STRIP_DATA, Config::PIN_SOURCE_DETECT,"Pin conflict: strip data conflicts with source detect.");
 
 // Clean up helper macros to avoid leaking to other headers.
 #undef CONFIG_ASSERT_PIN_DISTINCT
