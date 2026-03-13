@@ -6,7 +6,7 @@
 // NOTE:
 // This module intentionally does NOT call FastLED.show() inside update().
 // The main loop should call LedStrip::update() BEFORE LedMatrix::update().
-// LedMatrix::update() calls FastLED.show() which updates ALL controllers.
+// LedMatrix::update() calls FastLED.show() which updates ALL controllers. [1](https://teamtelstra-my.sharepoint.com/personal/jeff_c_cornwell_team_telstra_com/Documents/Microsoft%20Copilot%20Chat%20Files/LedStrip.cpp)
 
 namespace LedStrip {
 
@@ -29,7 +29,7 @@ namespace LedStrip {
   // Folder 1 (Party)
   static uint32_t s_partyTime     = 0;
 
-  // Folder 2 (Embers) - no per-LED heat buffer (SRAM saver)
+  // Folder 2 (Embers) - marble/noise driven, no per-LED heat buffer (SRAM saver)
   static uint32_t s_emberTime     = 0;
   static int32_t  s_emberDriftX   = 0;
 
@@ -40,13 +40,13 @@ namespace LedStrip {
   // ------------------------------------------------------------
   // Band widening control
   // ------------------------------------------------------------
-  // Requested: widen folder 1,2,4 by factor of 4 => one computed colour spans 4 LEDs.
+  // Widen folder 1,2,4 by factor of 4 => one computed colour spans 4 LEDs.
   static const uint8_t BLOCK_SIZE = 4;
 
-  // Feathering: apply a light in-place blur after block rendering to reduce "hard steps".
-  // These values are intentionally small so the 4-LED banding remains obvious but softened.
+  // Feathering: light in-place blur after block rendering to reduce hard steps.
   static const uint8_t FEATHER_PARTY  = 18;
-  static const uint8_t FEATHER_EMBER  = 14;
+  // Increased for Folder 2 to reduce "stripy" look on a long 128 LED strip.
+  static const uint8_t FEATHER_EMBER  = 34;
   static const uint8_t FEATHER_SPOOKY = 18;
 
   void clear() {
@@ -66,11 +66,9 @@ namespace LedStrip {
     }
   }
 
-  // Feather block edges without extra SRAM: a light blur is enough to soften the steps.
   static inline void featherEdges(uint8_t amount) {
-    // blur1d works in-place on the existing LED buffer.
-    // amount: 0..255 (higher = more blur).
     if (amount == 0) return;
+    // blur1d operates in-place on s_leds[] (no extra SRAM buffers). [1](https://teamtelstra-my.sharepoint.com/personal/jeff_c_cornwell_team_telstra_com/Documents/Microsoft%20Copilot%20Chat%20Files/LedStrip.cpp)
     blur1d(s_leds, NUM_LEDS, amount);
   }
 
@@ -82,10 +80,7 @@ namespace LedStrip {
   static inline void renderPartyMarbleStrip_Block4() {
     s_partyTime += 3;
 
-    // Virtual pixels = blocks
     const uint16_t virtualCount = (uint16_t)((NUM_LEDS + (BLOCK_SIZE - 1)) / BLOCK_SIZE);
-
-    // Keep existing "feel" but with wider bands due to virtualCount reduction.
     const uint16_t NOISE_SCALE = 380;
     const uint8_t  BRIGHT      = 255;
 
@@ -104,51 +99,82 @@ namespace LedStrip {
       fillBlock(i, c);
     }
 
-    // Soften hard steps between blocks.
     featherEdges(FEATHER_PARTY);
   }
 
-  // Folder 2: Ember glow (fireplace vibe) (block-rendered x4 + feather)
-  static inline void renderEmberGlowStrip_Block4() {
+  // Folder 2: Slow ember-bed marble (A1-style), darker lows, more blur, no white
+  static inline void renderEmberMarbleSlow_Block4() {
+    // Slow burn: reduce motion speed.
     s_emberTime += 1;
     s_emberDriftX += 1;
 
     const uint16_t virtualCount = (uint16_t)((NUM_LEDS + (BLOCK_SIZE - 1)) / BLOCK_SIZE);
 
-    const uint16_t NOISE_SCALE = 220;
+    // Two-octave noise to reduce "stripy" artifacts in 1D:
+    // A large-scale field + a smaller-scale field blended together.
+    const uint16_t SCALE_COARSE = 360;
+    const uint16_t SCALE_FINE   = 120;
+    const uint8_t  BLEND_FINE   = 80;   // 0..255 (higher = more fine detail)
 
-    const uint8_t EMBER_INDEX_MIN = 18;
-    const uint8_t EMBER_INDEX_MAX = 140;
+    // Brightness noise uses a separate scale/time offset so brightness pockets
+    // don't perfectly align with color pockets (more organic coal bed).
+    const uint16_t SCALE_BRIGHT = 220;
 
-    const uint8_t VAL_MIN = 120;
-    const uint8_t VAL_MAX = 255;
+    // Palette index clamp to stay red/orange only (no white-hot end of HeatColors_p). [1](https://teamtelstra-my.sharepoint.com/personal/jeff_c_cornwell_team_telstra_com/Documents/Microsoft%20Copilot%20Chat%20Files/LedStrip.cpp)[2](https://teamtelstra-my.sharepoint.com/personal/jeff_c_cornwell_team_telstra_com/Documents/Microsoft%20Copilot%20Chat%20Files/LedMatrix.cpp)
+    const uint8_t IDX_MIN = 6;    // deep red
+    const uint8_t IDX_MAX = 110;  // orange (kept well below white/yellow-white region)
 
-    const uint8_t POP_PROB = 3;   // /255 per block per frame (very rare)
-    const uint8_t POP_ADD_R = 40;
-    const uint8_t POP_ADD_G = 15;
+    // Darker lows for high contrast ("can turn quite low sometimes").
+    const uint8_t VAL_MIN = 4;    // very dim lows
+    const uint8_t VAL_MAX = 210;  // strong glow but not pushing into white due to idx clamp
 
-    const uint8_t shimmer = beatsin8(6, 0, 25);
+    // Calm shimmer (slow and subtle).
+    const uint8_t shimmer = beatsin8(4, 0, 18);
+
+    // Rare, gentle coal pops (A1-ish calm): fewer than A2, but still present.
+    const uint8_t POP_PROB = 3;   // /255 per block per frame (rare)
+    const uint8_t POP_ADD_VAL_MIN = 10;
+    const uint8_t POP_ADD_VAL_MAX = 45;
+    const uint8_t POP_WARM_R = 22;
+    const uint8_t POP_WARM_G = 8;
 
     for (uint16_t v = 0; v < virtualCount; ++v) {
-      const uint16_t x = (uint16_t)((uint32_t)v * NOISE_SCALE + (uint16_t)(s_emberDriftX & 0xFFFF));
-      const uint8_t  n = inoise8(x, (uint16_t)s_emberTime);
+      // Color field (two octaves blended)
+      const uint16_t xC1 = (uint16_t)((uint32_t)v * SCALE_COARSE + (uint16_t)(s_emberDriftX & 0xFFFF));
+      const uint16_t xC2 = (uint16_t)((uint32_t)v * SCALE_FINE   + (uint16_t)((s_emberDriftX * 3) & 0xFFFF));
+      const uint8_t  nCoarse = inoise8(xC1, (uint16_t)(s_emberTime));
+      const uint8_t  nFine   = inoise8(xC2, (uint16_t)(s_emberTime + 53));
+      uint8_t nColor = lerp8by8(nCoarse, nFine, BLEND_FINE);
+      nColor = ease8InOutQuad(nColor);
 
-      uint8_t idx = (uint8_t)map(n, 0, 255, EMBER_INDEX_MIN, EMBER_INDEX_MAX);
-      uint8_t val = (uint8_t)map(n, 0, 255, VAL_MIN, VAL_MAX);
+      // Brightness field (separately sampled)
+      const uint16_t xB = (uint16_t)((uint32_t)v * SCALE_BRIGHT + (uint16_t)((s_emberDriftX * 5) & 0xFFFF));
+      uint8_t nBright = inoise8(xB, (uint16_t)(s_emberTime + 97));
+      nBright = ease8InOutQuad(nBright);
+
+      // Map into ember-only palette region (no white).
+      const uint8_t idx = (uint8_t)map(nColor, 0, 255, IDX_MIN, IDX_MAX);
+
+      // Map brightness with very low floor (dark pockets), plus subtle shimmer.
+      uint8_t val = (uint8_t)map(nBright, 0, 255, VAL_MIN, VAL_MAX);
       val = qadd8(val, shimmer);
 
       CRGB c = ColorFromPalette(HeatColors_p, idx, val, LINEARBLEND);
 
+      // Rare coal pop: brighten + warm bias (still no white because idx is clamped).
       if (random8() < POP_PROB) {
-        c.r = qadd8(c.r, POP_ADD_R);
-        c.g = qadd8(c.g, POP_ADD_G);
+        const uint8_t addV = random8(POP_ADD_VAL_MIN, POP_ADD_VAL_MAX);
+        const uint8_t newV = qadd8(val, addV);
+        c = ColorFromPalette(HeatColors_p, idx, newV, LINEARBLEND);
+        c.r = qadd8(c.r, POP_WARM_R);
+        c.g = qadd8(c.g, POP_WARM_G);
       }
 
       const uint16_t i = (uint16_t)(v * BLOCK_SIZE);
       fillBlock(i, c);
     }
 
-    // Slightly less feather than party/spooky so ember "chunks" remain readable.
+    // More blur to reduce stripiness and soften band edges (still in-place). [1](https://teamtelstra-my.sharepoint.com/personal/jeff_c_cornwell_team_telstra_com/Documents/Microsoft%20Copilot%20Chat%20Files/LedStrip.cpp)
     featherEdges(FEATHER_EMBER);
   }
 
@@ -177,7 +203,7 @@ namespace LedStrip {
 
     const uint16_t virtualCount = (uint16_t)((NUM_LEDS + (BLOCK_SIZE - 1)) / BLOCK_SIZE);
 
-    // External shared breath MUST drive brightness (sync requirement).
+    // External shared breath MUST drive brightness (sync requirement). [1](https://teamtelstra-my.sharepoint.com/personal/jeff_c_cornwell_team_telstra_com/Documents/Microsoft%20Copilot%20Chat%20Files/LedStrip.cpp)[2](https://teamtelstra-my.sharepoint.com/personal/jeff_c_cornwell_team_telstra_com/Documents/Microsoft%20Copilot%20Chat%20Files/LedMatrix.cpp)
     const uint8_t pulse = (s_externalSpookyBreath != 0xFF) ? s_externalSpookyBreath : 90;
 
     const uint8_t SPOOKY_HUE_MIN = 70;
@@ -203,7 +229,6 @@ namespace LedStrip {
       fillBlock(i, c);
     }
 
-    // Soften hard steps between blocks while keeping banding.
     featherEdges(FEATHER_SPOOKY);
   }
 
@@ -216,7 +241,7 @@ namespace LedStrip {
     clear();
 
     // One-time show at boot so strip comes up in a known state.
-    // (Runtime updates remain owned by LedMatrix::update().)
+    // (Runtime updates remain owned by LedMatrix::update().) [1](https://teamtelstra-my.sharepoint.com/personal/jeff_c_cornwell_team_telstra_com/Documents/Microsoft%20Copilot%20Chat%20Files/LedStrip.cpp)[2](https://teamtelstra-my.sharepoint.com/personal/jeff_c_cornwell_team_telstra_com/Documents/Microsoft%20Copilot%20Chat%20Files/LedMatrix.cpp)
     FastLED.show();
 
     s_lastFrameMs  = millis();
@@ -224,6 +249,7 @@ namespace LedStrip {
     s_lastFolder   = 255;
 
     s_partyTime    = 0;
+
     s_emberTime    = 0;
     s_emberDriftX  = 0;
 
@@ -234,12 +260,12 @@ namespace LedStrip {
   }
 
   void update(uint8_t folder, bool lightsOn) {
-    // Off conditions: MATRIX_OFF (lightsOn=false) or folder==99
+    // Off conditions: MATRIX_OFF (lightsOn=false) or folder==99 [1](https://teamtelstra-my.sharepoint.com/personal/jeff_c_cornwell_team_telstra_com/Documents/Microsoft%20Copilot%20Chat%20Files/LedStrip.cpp)
     if (!lightsOn || folder == 99) {
       if (!s_isOffLatched) {
         clear();
         s_isOffLatched = true;
-        // No FastLED.show() here; LedMatrix::update() will push the cleared state.
+        // No FastLED.show() here; LedMatrix::update() will push the cleared state. [1](https://teamtelstra-my.sharepoint.com/personal/jeff_c_cornwell_team_telstra_com/Documents/Microsoft%20Copilot%20Chat%20Files/LedStrip.cpp)[2](https://teamtelstra-my.sharepoint.com/personal/jeff_c_cornwell_team_telstra_com/Documents/Microsoft%20Copilot%20Chat%20Files/LedMatrix.cpp)
       }
       s_lastFolder = folder;
       return;
@@ -270,14 +296,14 @@ namespace LedStrip {
 
     switch (folder) {
       case 1: renderPartyMarbleStrip_Block4(); break; // widened x4 + feathered
-      case 2: renderEmberGlowStrip_Block4();   break; // widened x4 + feathered
+      case 2: renderEmberMarbleSlow_Block4();  break; // slow, darker, blurrier ember coals
       case 3: renderXmasHalfPulseStrip();      break; // unchanged
       case 4: renderSpookyStrip_Block4();      break; // widened x4 + feathered (breath sync preserved)
       default: clear(); break;
     }
 
     // IMPORTANT: Do not call FastLED.show() here.
-    // LedMatrix::update() already calls FastLED.show() and will output both controllers.
+    // LedMatrix::update() already calls FastLED.show() and will output both controllers. [1](https://teamtelstra-my.sharepoint.com/personal/jeff_c_cornwell_team_telstra_com/Documents/Microsoft%20Copilot%20Chat%20Files/LedStrip.cpp)[2](https://teamtelstra-my.sharepoint.com/personal/jeff_c_cornwell_team_telstra_com/Documents/Microsoft%20Copilot%20Chat%20Files/LedMatrix.cpp)
   }
 
 } // namespace LedStrip
