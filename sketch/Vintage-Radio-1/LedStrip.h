@@ -7,7 +7,7 @@
 
 /*
 ============================================================
-WS2812B LED Strip (128 LEDs) - Lightweight Module
+WS2812B LED Strip (90 LEDs) - Lightweight Module
 ============================================================
 Goals:
  - Minimal SRAM/CPU impact (Nano-friendly)

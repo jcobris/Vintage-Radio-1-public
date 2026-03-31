@@ -221,7 +221,7 @@ namespace Config {
   constexpr uint8_t PIN_STRIP_DATA = A0; // A0
 
   // UPDATED: 128 LEDs in the strip
-  constexpr uint16_t STRIP_NUM_LEDS = 128;
+  constexpr uint16_t STRIP_NUM_LEDS = 90;
 }
 
 // ============================================================
