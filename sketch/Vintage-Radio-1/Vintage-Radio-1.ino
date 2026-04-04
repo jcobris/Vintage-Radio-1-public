@@ -24,21 +24,26 @@ static const uint8_t DIAL_SOLID_ALT    = 30;
 
 // When the matrix is switched OFF, WS2812 load disappears and the 5V rail can rise,
 // making the dial LED appear noticeably brighter at the same PWM level.
-// Provide a separate solid brightness for "matrix off" to compensate perceptually.
 static const uint8_t DIAL_SOLID_MATRIX_OFF_NORMAL = 30; // tune to taste
 static const uint8_t DIAL_SOLID_MATRIX_OFF_ALT    = 25; // tune to taste
 
-// Pulse behaviour (folder 4) - shared breath for matrix + dial
-// (These drive matrix/strip. Dial can have an additional floor clamp below.)
+// ------------------------------------------------------------
+// Folder 4 breathing (shared for matrix/strip)
+// ------------------------------------------------------------
 static const uint8_t DIAL_PULSE_MIN_NORMAL = 8;
 static const uint8_t DIAL_PULSE_MAX_NORMAL = 55;
 static const uint8_t DIAL_PULSE_MIN_ALT    = 6;
 static const uint8_t DIAL_PULSE_MAX_ALT    = 40;
-static const uint8_t DIAL_PULSE_BPM        = 9;   // slowed earlier
+static const uint8_t DIAL_PULSE_BPM        = 9;   // keep as set
 
-// NEW: Dial-only floor clamp for Folder 4 (does not affect matrix/strip)
-static const uint8_t DIAL_F4_MIN_FLOOR_NORMAL = 32; // raise if dial still dips too low
-static const uint8_t DIAL_F4_MIN_FLOOR_ALT    = 32; // raise if dial still dips too low
+// ------------------------------------------------------------
+// Folder 4 dial-only breathing window (prevents "off" without clamping)
+// ------------------------------------------------------------
+// These only affect the D3 dial LED. Matrix/strip are unchanged.
+static const uint8_t DIAL_F4_DIAL_MIN_NORMAL = 32; // your proven "never drops out" threshold
+static const uint8_t DIAL_F4_DIAL_MAX_NORMAL = 50; // requested peak
+static const uint8_t DIAL_F4_DIAL_MIN_ALT    = 32; // can tune separately if desired
+static const uint8_t DIAL_F4_DIAL_MAX_ALT    = 50; // can tune separately if desired
 
 // Flicker behaviour (between stations)
 static const uint8_t  DIAL_FLICKER_MIN_NORMAL = 30;
@@ -85,7 +90,7 @@ static uint8_t  g_nextBtnRaw = HIGH;
 static uint8_t  g_nextBtnStable = HIGH;
 static uint32_t g_nextBtnLastChangeMs = 0;
 
-// Folder 4 breath smoothing (Q8.8 fixed point)
+// Folder 4 shared breath smoothing (Q8.8 fixed point)
 static uint16_t g_spookyBreathQ8_8 = 0;
 
 // ============================================================
@@ -117,6 +122,26 @@ static inline uint8_t smoothSpookyBreath(uint8_t target) {
   const int16_t diff = (int16_t)(targetQ - g_spookyBreathQ8_8);
   g_spookyBreathQ8_8 = (uint16_t)(g_spookyBreathQ8_8 + (diff >> 2));
   return (uint8_t)(g_spookyBreathQ8_8 >> 8);
+}
+
+// Dial-only smooth breathing output (same BPM as matrix/strip, but mapped to a safe PWM window)
+// - No hard clamp => no "stick at bottom then jump"
+// - Still phase-locked to the same BPM
+static inline uint8_t dialBreathMapped(bool altMode) {
+  const uint8_t dMin = altMode ? DIAL_F4_DIAL_MIN_ALT : DIAL_F4_DIAL_MIN_NORMAL;
+  const uint8_t dMax = altMode ? DIAL_F4_DIAL_MAX_ALT : DIAL_F4_DIAL_MAX_NORMAL;
+
+  uint8_t range = (dMax >= dMin) ? (uint8_t)(dMax - dMin) : 0;
+  if (range == 0) return dMin;
+
+  // High-res sine (0..65535), phase-locked to millis() at DIAL_PULSE_BPM
+  const uint16_t wave16 = beatsin16(DIAL_PULSE_BPM, 0, 65535);
+  uint8_t shape = (uint8_t)(wave16 >> 8);          // 0..255
+  shape = ease8InOutQuad(shape);                   // smoother ends, no flat clamp
+
+  // Map 0..255 -> dMin..dMax
+  const uint8_t scaled = scale8(shape, range);     // 0..range (approx)
+  return (uint8_t)(dMin + scaled);
 }
 
 // ============================================================
@@ -160,6 +185,9 @@ void setup() {
 void loop() {
   const uint32_t now = millis();
 
+  // ----------------------------------------------------------
+  // Display mode
+  // ----------------------------------------------------------
   g_displayMode = readDisplayMode();
   if (g_displayMode != g_lastDisplayMode) {
     g_lastDisplayMode = g_displayMode;
@@ -184,6 +212,9 @@ void loop() {
   const bool altMode  = (g_displayMode == DISPLAY_ALT);
   const bool lightsOn = (g_displayMode != DISPLAY_OFF);
 
+  // ----------------------------------------------------------
+  // Source mode
+  // ----------------------------------------------------------
   g_sourceMode = readSourceMode();
   if (g_sourceMode != g_lastSourceMode) {
     g_lastSourceMode = g_sourceMode;
@@ -197,6 +228,9 @@ void loop() {
     }
   }
 
+  // ----------------------------------------------------------
+  // Next-track button debounce
+  // ----------------------------------------------------------
   const uint8_t btn = digitalRead(Config::PIN_NEXT_TRACK_BUTTON);
 
   if (btn != g_nextBtnRaw) {
@@ -217,6 +251,9 @@ void loop() {
     }
   }
 
+  // ----------------------------------------------------------
+  // Folder selection (RC timing protected)
+  // ----------------------------------------------------------
   bool didTunePollThisLoop = false;
 
   if (g_sourceMode == SOURCE_MP3) {
@@ -229,11 +266,17 @@ void loop() {
     g_folder = 1;
   }
 
+  // ----------------------------------------------------------
+  // MP3 control
+  // ----------------------------------------------------------
   if (g_sourceMode == SOURCE_MP3) {
     MP3::setDesiredFolder(g_folder);
     MP3::tick();
   }
 
+  // ----------------------------------------------------------
+  // Dial LED + shared Folder 4 breath
+  // ----------------------------------------------------------
   if (!lightsOn) {
     DisplayLED::setSolid(altMode ? DIAL_SOLID_MATRIX_OFF_ALT : DIAL_SOLID_MATRIX_OFF_NORMAL);
     LedMatrix::setSpookyBreath(0xFF);
@@ -249,6 +292,7 @@ void loop() {
     LedStrip::setSpookyBreath(0xFF);
     resetSpookyBreathSmoother();
   } else if (g_folder == 4) {
+    // Matrix/strip keep existing shared breath (unchanged)
     const uint8_t rawBreath = beatsin8(
       DIAL_PULSE_BPM,
       altMode ? DIAL_PULSE_MIN_ALT : DIAL_PULSE_MIN_NORMAL,
@@ -257,12 +301,10 @@ void loop() {
 
     const uint8_t sharedBreath = smoothSpookyBreath(rawBreath);
 
-    // Dial-only clamp (matrix/strip keep the exact sharedBreath low that you like)
-    uint8_t dialBreath = sharedBreath;
-    const uint8_t floorVal = altMode ? DIAL_F4_MIN_FLOOR_ALT : DIAL_F4_MIN_FLOOR_NORMAL;
-    if (dialBreath < floorVal) dialBreath = floorVal;
+    // Dial uses mapped sine (no clamp, no flat dwell), same BPM phase
+    const uint8_t dialOut = dialBreathMapped(altMode);
 
-    DisplayLED::setSolid(dialBreath);
+    DisplayLED::setSolid(dialOut);
     LedMatrix::setSpookyBreath(sharedBreath);
     LedStrip::setSpookyBreath(sharedBreath);
   } else {
@@ -272,7 +314,9 @@ void loop() {
     resetSpookyBreathSmoother();
   }
 
-  // Skip LED updates on RC-measurement iteration (RC timing protection)
+  // ----------------------------------------------------------
+  // LEDs: skip updates on the RC-measurement iteration
+  // ----------------------------------------------------------
   if (!didTunePollThisLoop) {
     LedStrip::update(g_folder, lightsOn);
     LedMatrix::update(g_folder, lightsOn);
