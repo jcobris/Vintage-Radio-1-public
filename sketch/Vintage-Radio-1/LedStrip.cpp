@@ -29,7 +29,7 @@ namespace LedStrip {
   // Folder 1 (Party)
   static uint32_t s_partyTime = 0;
 
-  // Folder 2 (Embers) - marble/noise driven, no per-LED heat buffer (SRAM saver)
+  // Folder 2 (Embers)
   static uint32_t s_emberTime = 0;
   static int32_t s_emberDriftX = 0;
 
@@ -43,9 +43,8 @@ namespace LedStrip {
   static const uint8_t BLOCK_SIZE = 4;
 
   // Feathering: light in-place blur after block rendering to reduce hard steps.
-  static const uint8_t FEATHER_PARTY = 18;
-  // Increased for Folder 2 to reduce "stripy" look on a long strip.
-  static const uint8_t FEATHER_EMBER = 34;
+  static const uint8_t FEATHER_PARTY  = 18;
+  static const uint8_t FEATHER_EMBER  = 34;
   static const uint8_t FEATHER_SPOOKY = 18;
 
   void clear() {
@@ -67,7 +66,6 @@ namespace LedStrip {
 
   static inline void featherEdges(uint8_t amount) {
     if (amount == 0) return;
-    // blur1d operates in-place on s_leds[] (no extra SRAM buffers).
     blur1d(s_leds, NUM_LEDS, amount);
   }
 
@@ -105,8 +103,8 @@ namespace LedStrip {
     const uint16_t virtualCount = (uint16_t)((NUM_LEDS + (BLOCK_SIZE - 1)) / BLOCK_SIZE);
 
     const uint16_t SCALE_COARSE = 360;
-    const uint16_t SCALE_FINE = 120;
-    const uint8_t BLEND_FINE = 80;
+    const uint16_t SCALE_FINE   = 120;
+    const uint8_t  BLEND_FINE   = 80;
 
     const uint16_t SCALE_BRIGHT = 220;
 
@@ -126,9 +124,9 @@ namespace LedStrip {
 
     for (uint16_t v = 0; v < virtualCount; ++v) {
       const uint16_t xC1 = (uint16_t)((uint32_t)v * SCALE_COARSE + (uint16_t)(s_emberDriftX & 0xFFFF));
-      const uint16_t xC2 = (uint16_t)((uint32_t)v * SCALE_FINE + (uint16_t)((s_emberDriftX * 3) & 0xFFFF));
+      const uint16_t xC2 = (uint16_t)((uint32_t)v * SCALE_FINE   + (uint16_t)((s_emberDriftX * 3) & 0xFFFF));
       const uint8_t nCoarse = inoise8(xC1, (uint16_t)(s_emberTime));
-      const uint8_t nFine = inoise8(xC2, (uint16_t)(s_emberTime + 53));
+      const uint8_t nFine   = inoise8(xC2, (uint16_t)(s_emberTime + 53));
       uint8_t nColor = lerp8by8(nCoarse, nFine, BLEND_FINE);
       nColor = ease8InOutQuad(nColor);
 
@@ -159,9 +157,9 @@ namespace LedStrip {
   }
 
   // Folder 3: Christmas half pulse
-  // FIX: Match matrix phase relationship:
-  // - Matrix: left RED = brightA (phase 0), right GREEN = brightB (phase 128)  [1](https://teamtelstra-my.sharepoint.com/personal/jeff_c_cornwell_team_telstra_com/Documents/Microsoft%20Copilot%20Chat%20Files/LedMatrix.cpp)
-  // - Strip: ensure GREEN uses brightB and RED uses brightA, so they rise/fall together by color.
+  // FIX: Phase-align colours with matrix:
+  // Matrix: left RED = brightA (phase 0), right GREEN = brightB (phase 128). [2](https://teamtelstra-my.sharepoint.com/personal/jeff_c_cornwell_team_telstra_com/Documents/Microsoft%20Copilot%20Chat%20Files/LedMatrix.cpp)
+  // Strip: keep left GREEN / right RED, but ensure GREEN uses brightB and RED uses brightA.
   static inline void renderXmasHalfPulseStrip() {
     const uint8_t MIN_BRIGHT = 30;
     const uint8_t MAX_BRIGHT = 255;
@@ -175,17 +173,27 @@ namespace LedStrip {
 
     for (uint16_t i = 0; i < NUM_LEDS; ++i) {
       if (i < split) {
-        // LEFT side: GREEN (use brightB to match matrix GREEN phase)
+        // LEFT: GREEN (match matrix GREEN phase => brightB)
         s_leds[i] = CRGB(0, brightB, 0);
       } else {
-        // RIGHT side: RED (use brightA to match matrix RED phase)
+        // RIGHT: RED (match matrix RED phase => brightA)
         s_leds[i] = CRGB(brightA, 0, 0);
       }
     }
   }
 
-  // Folder 4: Solid spooky fog handled elsewhere (your current implementation)
-  // (Intentionally unchanged)
+  // Folder 4: Solid spooky fog (your current setup)
+  static inline void renderSpookySolidStrip() {
+    const uint8_t pulse = (s_externalSpookyBreath != 0xFF) ? s_externalSpookyBreath : 90;
+
+    // Hue 100 = your chosen "more lime, less aqua"
+    const CHSV fogHSV(100, 220, 255);
+    CRGB fog = fogHSV;
+    fog.nscale8_video(pulse);
+
+    fill_solid(s_leds, NUM_LEDS, fog);
+    featherEdges(FEATHER_SPOOKY);
+  }
 
   // ------------------------------------------------------------
   // Public API
@@ -194,11 +202,13 @@ namespace LedStrip {
     FastLED.addLeds<WS2812B, DATA_PIN, COLOR_ORDER>(s_leds, NUM_LEDS);
     clear();
     // One-time show at boot so strip comes up in a known state.
+    // (Runtime updates remain owned by LedMatrix::update().)
     FastLED.show();
 
     s_lastFrameMs = millis();
     s_isOffLatched = false;
     s_lastFolder = 255;
+
     s_partyTime = 0;
     s_emberTime = 0;
     s_emberDriftX = 0;
@@ -225,7 +235,7 @@ namespace LedStrip {
       s_lastFrameMs = 0; // allow immediate render
     }
 
-    // Gentle deterministic resets on folder change
+    // Gentle deterministic resets on folder change (as before)
     if (folder != s_lastFolder) {
       s_lastFolder = folder;
       if (folder == 1) {
@@ -233,6 +243,7 @@ namespace LedStrip {
       } else if (folder == 2) {
         s_emberTime = 0;
       }
+      // Folder 3 and 4 do not require time resets in this implementation
     }
 
     const uint32_t now = millis();
@@ -242,15 +253,9 @@ namespace LedStrip {
     switch (folder) {
       case 1: renderPartyMarbleStrip_Block4(); break;
       case 2: renderEmberMarbleSlow_Block4(); break;
-      case 3: renderXmasHalfPulseStrip(); break; // FIXED phase alignment
-      case 4:
-        // Your spooky strip logic lives elsewhere in this file in your current build.
-        // (If you're on the solid-fog version, it will be in renderSpookySolidStrip().)
-        // Leaving folder 4 untouched here.
-        break;
-      default:
-        clear();
-        break;
+      case 3: renderXmasHalfPulseStrip(); break;
+      case 4: renderSpookySolidStrip(); break; // ✅ FIX: actually render folder 4
+      default: clear(); break;
     }
 
     // IMPORTANT: Do not call FastLED.show() here.
