@@ -34,16 +34,16 @@ static const uint8_t DIAL_PULSE_MIN_NORMAL = 8;
 static const uint8_t DIAL_PULSE_MAX_NORMAL = 55;
 static const uint8_t DIAL_PULSE_MIN_ALT    = 6;
 static const uint8_t DIAL_PULSE_MAX_ALT    = 40;
-static const uint8_t DIAL_PULSE_BPM        = 9;   // keep as set
+static const uint8_t DIAL_PULSE_BPM        = 9;
 
 // ------------------------------------------------------------
 // Folder 4 dial-only breathing window (prevents "off" without clamping)
 // ------------------------------------------------------------
 // These only affect the D3 dial LED. Matrix/strip are unchanged.
-static const uint8_t DIAL_F4_DIAL_MIN_NORMAL = 32; // your proven "never drops out" threshold
-static const uint8_t DIAL_F4_DIAL_MAX_NORMAL = 50; // requested peak
-static const uint8_t DIAL_F4_DIAL_MIN_ALT    = 32; // can tune separately if desired
-static const uint8_t DIAL_F4_DIAL_MAX_ALT    = 50; // can tune separately if desired
+static const uint8_t DIAL_F4_DIAL_MIN_NORMAL = 32;
+static const uint8_t DIAL_F4_DIAL_MAX_NORMAL = 55;
+static const uint8_t DIAL_F4_DIAL_MIN_ALT    = 32;
+static const uint8_t DIAL_F4_DIAL_MAX_ALT    = 55;
 
 // Flicker behaviour (between stations)
 static const uint8_t  DIAL_FLICKER_MIN_NORMAL = 30;
@@ -93,6 +93,9 @@ static uint32_t g_nextBtnLastChangeMs = 0;
 // Folder 4 shared breath smoothing (Q8.8 fixed point)
 static uint16_t g_spookyBreathQ8_8 = 0;
 
+// Dial dithering accumulator (16-bit fractional error diffusion)
+static uint16_t g_dialDitherErr16 = 0;
+
 // ============================================================
 // Helpers
 // ============================================================
@@ -125,23 +128,45 @@ static inline uint8_t smoothSpookyBreath(uint8_t target) {
 }
 
 // Dial-only smooth breathing output (same BPM as matrix/strip, but mapped to a safe PWM window)
-// - No hard clamp => no "stick at bottom then jump"
-// - Still phase-locked to the same BPM
+// Uses high-resolution temporal dithering to reduce visible stepping at low PWM levels.
 static inline uint8_t dialBreathMapped(bool altMode) {
   const uint8_t dMin = altMode ? DIAL_F4_DIAL_MIN_ALT : DIAL_F4_DIAL_MIN_NORMAL;
   const uint8_t dMax = altMode ? DIAL_F4_DIAL_MAX_ALT : DIAL_F4_DIAL_MAX_NORMAL;
 
-  uint8_t range = (dMax >= dMin) ? (uint8_t)(dMax - dMin) : 0;
-  if (range == 0) return dMin;
+  if (dMax <= dMin) return dMin;
 
-  // High-res sine (0..65535), phase-locked to millis() at DIAL_PULSE_BPM
+  const uint8_t range = (uint8_t)(dMax - dMin);
+
+  // 16-bit sine, phase-locked to millis() at DIAL_PULSE_BPM
   const uint16_t wave16 = beatsin16(DIAL_PULSE_BPM, 0, 65535);
-  uint8_t shape = (uint8_t)(wave16 >> 8);          // 0..255
-  shape = ease8InOutQuad(shape);                   // smoother ends, no flat clamp
 
-  // Map 0..255 -> dMin..dMax
-  const uint8_t scaled = scale8(shape, range);     // 0..range (approx)
-  return (uint8_t)(dMin + scaled);
+  // Convert to 0..255 shape (still for easing), but KEEP the full 16-bit wave for fraction.
+  uint8_t shape8 = (uint8_t)(wave16 >> 8);
+  shape8 = ease8InOutQuad(shape8);
+
+  // Re-expand eased shape back to 16-bit so fractional resolution exists even at low end.
+  // This keeps the curve smooth while allowing much finer dithering steps.
+  const uint16_t eased16 = (uint16_t)shape8 << 8; // 0..65535 in steps of 256 (still better than before after mapping)
+
+  // Map eased16 (0..65535) into dMin..dMax using 16-bit math:
+  // value16 = dMin*65535 + eased16*range
+  // out = floor(value16 / 65535), frac = remainder
+  const uint32_t scaled32 = (uint32_t)eased16 * (uint32_t)range; // 0..(65535*range)
+
+  // Integer part (0..range) and 16-bit fractional part (0..65534)
+  const uint16_t baseAdd = (uint16_t)(scaled32 >> 16);           // ~0..range
+  const uint16_t frac16  = (uint16_t)(scaled32 & 0xFFFF);        // fractional
+
+  uint8_t out = (uint8_t)(dMin + (uint8_t)baseAdd);
+
+  // High-res temporal dithering: accumulate 16-bit fraction.
+  // If it overflows, bump output by 1 (never exceed dMax).
+  g_dialDitherErr16 = (uint16_t)(g_dialDitherErr16 + frac16);
+  if (g_dialDitherErr16 < frac16) { // overflow occurred
+    if (out < dMax) out++;
+  }
+
+  return out;
 }
 
 // ============================================================
@@ -282,6 +307,7 @@ void loop() {
     LedMatrix::setSpookyBreath(0xFF);
     LedStrip::setSpookyBreath(0xFF);
     resetSpookyBreathSmoother();
+    g_dialDitherErr16 = 0;
   } else if (g_folder == 99) {
     DisplayLED::flickerRandomTick(
       altMode ? DIAL_FLICKER_MIN_ALT : DIAL_FLICKER_MIN_NORMAL,
@@ -291,6 +317,7 @@ void loop() {
     LedMatrix::setSpookyBreath(0xFF);
     LedStrip::setSpookyBreath(0xFF);
     resetSpookyBreathSmoother();
+    g_dialDitherErr16 = 0;
   } else if (g_folder == 4) {
     // Matrix/strip keep existing shared breath (unchanged)
     const uint8_t rawBreath = beatsin8(
@@ -301,7 +328,7 @@ void loop() {
 
     const uint8_t sharedBreath = smoothSpookyBreath(rawBreath);
 
-    // Dial uses mapped sine (no clamp, no flat dwell), same BPM phase
+    // Dial uses mapped + high-res dithered sine (no clamp, no flat dwell), same BPM phase
     const uint8_t dialOut = dialBreathMapped(altMode);
 
     DisplayLED::setSolid(dialOut);
@@ -312,6 +339,7 @@ void loop() {
     LedMatrix::setSpookyBreath(0xFF);
     LedStrip::setSpookyBreath(0xFF);
     resetSpookyBreathSmoother();
+    g_dialDitherErr16 = 0;
   }
 
   // ----------------------------------------------------------
