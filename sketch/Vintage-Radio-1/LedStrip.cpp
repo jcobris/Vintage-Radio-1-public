@@ -6,14 +6,14 @@
 // NOTE:
 // This module intentionally does NOT call FastLED.show() inside update().
 // The main loop should call LedStrip::update() BEFORE LedMatrix::update().
-// LedMatrix::update() calls FastLED.show() which updates ALL controllers. [1](https://teamtelstra-my.sharepoint.com/personal/jeff_c_cornwell_team_telstra_com/Documents/Microsoft%20Copilot%20Chat%20Files/LedStrip.cpp)
+// LedMatrix::update() calls FastLED.show() which updates ALL controllers.
 
 namespace LedStrip {
 
   // Hardware
-  static const uint8_t  DATA_PIN     = Config::PIN_STRIP_DATA;
-  static const uint16_t NUM_LEDS     = Config::STRIP_NUM_LEDS;
-  static const EOrder   COLOR_ORDER  = GRB;
+  static const uint8_t  DATA_PIN    = Config::PIN_STRIP_DATA;
+  static const uint16_t NUM_LEDS    = Config::STRIP_NUM_LEDS;
+  static const EOrder   COLOR_ORDER = GRB;
 
   // Frame pacing
   static const uint16_t FRAME_INTERVAL_MS = 30;
@@ -22,20 +22,20 @@ namespace LedStrip {
   static CRGB s_leds[NUM_LEDS];
 
   // State
-  static uint32_t s_lastFrameMs   = 0;
-  static bool     s_isOffLatched  = false;
-  static uint8_t  s_lastFolder    = 255;
+  static uint32_t s_lastFrameMs = 0;
+  static bool     s_isOffLatched = false;
+  static uint8_t  s_lastFolder = 255;
 
   // Folder 1 (Party)
-  static uint32_t s_partyTime     = 0;
+  static uint32_t s_partyTime = 0;
 
   // Folder 2 (Embers) - marble/noise driven, no per-LED heat buffer (SRAM saver)
-  static uint32_t s_emberTime     = 0;
-  static int32_t  s_emberDriftX   = 0;
+  static uint32_t s_emberTime = 0;
+  static int32_t  s_emberDriftX = 0;
 
   // Folder 4 (Spooky) - external breath override (0xFF = not set)
   static uint8_t  s_externalSpookyBreath = 0xFF;
-  static uint32_t s_spookyTime   = 0;
+  static uint32_t s_spookyTime = 0;
 
   // ------------------------------------------------------------
   // Band widening control
@@ -68,7 +68,7 @@ namespace LedStrip {
 
   static inline void featherEdges(uint8_t amount) {
     if (amount == 0) return;
-    // blur1d operates in-place on s_leds[] (no extra SRAM buffers). [1](https://teamtelstra-my.sharepoint.com/personal/jeff_c_cornwell_team_telstra_com/Documents/Microsoft%20Copilot%20Chat%20Files/LedStrip.cpp)
+    // blur1d operates in-place on s_leds[] (no extra SRAM buffers).
     blur1d(s_leds, NUM_LEDS, amount);
   }
 
@@ -82,7 +82,7 @@ namespace LedStrip {
 
     const uint16_t virtualCount = (uint16_t)((NUM_LEDS + (BLOCK_SIZE - 1)) / BLOCK_SIZE);
     const uint16_t NOISE_SCALE = 380;
-    const uint8_t  BRIGHT      = 255;
+    const uint8_t  BRIGHT = 255;
 
     const uint8_t swirlA = beatsin8(7, 0, 255);
     const uint8_t swirlB = beatsin8(13, 0, 255);
@@ -92,8 +92,7 @@ namespace LedStrip {
       const uint16_t z = (uint16_t)(s_partyTime + (swirlA / 2) + (swirlB / 3));
       const uint8_t  n = inoise8(x, z);
       const uint8_t  index = qadd8(n, 30);
-
-      const CRGB c = ColorFromPalette(PartyColors_p, index, BRIGHT);
+      const CRGB     c = ColorFromPalette(PartyColors_p, index, BRIGHT);
 
       const uint16_t i = (uint16_t)(v * BLOCK_SIZE);
       fillBlock(i, c);
@@ -113,26 +112,26 @@ namespace LedStrip {
     // Two-octave noise to reduce "stripy" artifacts in 1D:
     // A large-scale field + a smaller-scale field blended together.
     const uint16_t SCALE_COARSE = 360;
-    const uint16_t SCALE_FINE   = 120;
-    const uint8_t  BLEND_FINE   = 80;   // 0..255 (higher = more fine detail)
+    const uint16_t SCALE_FINE = 120;
+    const uint8_t BLEND_FINE = 80; // 0..255 (higher = more fine detail)
 
     // Brightness noise uses a separate scale/time offset so brightness pockets
     // don't perfectly align with color pockets (more organic coal bed).
     const uint16_t SCALE_BRIGHT = 220;
 
-    // Palette index clamp to stay red/orange only (no white-hot end of HeatColors_p). [1](https://teamtelstra-my.sharepoint.com/personal/jeff_c_cornwell_team_telstra_com/Documents/Microsoft%20Copilot%20Chat%20Files/LedStrip.cpp)[2](https://teamtelstra-my.sharepoint.com/personal/jeff_c_cornwell_team_telstra_com/Documents/Microsoft%20Copilot%20Chat%20Files/LedMatrix.cpp)
-    const uint8_t IDX_MIN = 6;    // deep red
-    const uint8_t IDX_MAX = 110;  // orange (kept well below white/yellow-white region)
+    // Palette index clamp to stay red/orange only (no white-hot end of HeatColors_p).
+    const uint8_t IDX_MIN = 6;   // deep red
+    const uint8_t IDX_MAX = 110; // orange (kept well below white/yellow-white region)
 
     // Darker lows for high contrast ("can turn quite low sometimes").
-    const uint8_t VAL_MIN = 4;    // very dim lows
-    const uint8_t VAL_MAX = 210;  // strong glow but not pushing into white due to idx clamp
+    const uint8_t VAL_MIN = 4;   // very dim lows
+    const uint8_t VAL_MAX = 210; // strong glow but not pushing into white due to idx clamp
 
     // Calm shimmer (slow and subtle).
     const uint8_t shimmer = beatsin8(4, 0, 18);
 
     // Rare, gentle coal pops (A1-ish calm): fewer than A2, but still present.
-    const uint8_t POP_PROB = 3;   // /255 per block per frame (rare)
+    const uint8_t POP_PROB = 3; // /255 per block per frame (rare)
     const uint8_t POP_ADD_VAL_MIN = 10;
     const uint8_t POP_ADD_VAL_MAX = 45;
     const uint8_t POP_WARM_R = 22;
@@ -141,9 +140,9 @@ namespace LedStrip {
     for (uint16_t v = 0; v < virtualCount; ++v) {
       // Color field (two octaves blended)
       const uint16_t xC1 = (uint16_t)((uint32_t)v * SCALE_COARSE + (uint16_t)(s_emberDriftX & 0xFFFF));
-      const uint16_t xC2 = (uint16_t)((uint32_t)v * SCALE_FINE   + (uint16_t)((s_emberDriftX * 3) & 0xFFFF));
-      const uint8_t  nCoarse = inoise8(xC1, (uint16_t)(s_emberTime));
-      const uint8_t  nFine   = inoise8(xC2, (uint16_t)(s_emberTime + 53));
+      const uint16_t xC2 = (uint16_t)((uint32_t)v * SCALE_FINE + (uint16_t)((s_emberDriftX * 3) & 0xFFFF));
+      const uint8_t nCoarse = inoise8(xC1, (uint16_t)(s_emberTime));
+      const uint8_t nFine = inoise8(xC2, (uint16_t)(s_emberTime + 53));
       uint8_t nColor = lerp8by8(nCoarse, nFine, BLEND_FINE);
       nColor = ease8InOutQuad(nColor);
 
@@ -174,25 +173,30 @@ namespace LedStrip {
       fillBlock(i, c);
     }
 
-    // More blur to reduce stripiness and soften band edges (still in-place). [1](https://teamtelstra-my.sharepoint.com/personal/jeff_c_cornwell_team_telstra_com/Documents/Microsoft%20Copilot%20Chat%20Files/LedStrip.cpp)
+    // More blur to reduce stripiness and soften band edges (still in-place).
     featherEdges(FEATHER_EMBER);
   }
 
-  // Folder 3: Christmas half pulse (left red, right green) - UNCHANGED
+  // Folder 3: Christmas half pulse (UPDATED: swapped colours + split offset -2)
   static inline void renderXmasHalfPulseStrip() {
     const uint8_t MIN_BRIGHT = 30;
     const uint8_t MAX_BRIGHT = 255;
-    const uint8_t BPM        = 18;
+    const uint8_t BPM = 18;
 
     const uint8_t brightA = beatsin8(BPM, MIN_BRIGHT, MAX_BRIGHT, 0, 0);
     const uint8_t brightB = beatsin8(BPM, MIN_BRIGHT, MAX_BRIGHT, 0, 128);
 
-    const uint16_t half = (uint16_t)(NUM_LEDS / 2);
+    const uint16_t half  = (uint16_t)(NUM_LEDS / 2);
+    // Item 3: move the boundary left by 2 LEDs (minus 2 offset)
+    const uint16_t split = (half + 2 <= NUM_LEDS) ? (uint16_t)(half + 2) : half;
+
     for (uint16_t i = 0; i < NUM_LEDS; ++i) {
-      if (i < half) {
-        s_leds[i] = CRGB(brightA, 0, 0);
+      if (i < split) {
+        // LEFT side: GREEN
+        s_leds[i] = CRGB(0, brightA, 0);
       } else {
-        s_leds[i] = CRGB(0, brightB, 0);
+        // RIGHT side: RED
+        s_leds[i] = CRGB(brightB, 0, 0);
       }
     }
   }
@@ -203,12 +207,11 @@ namespace LedStrip {
 
     const uint16_t virtualCount = (uint16_t)((NUM_LEDS + (BLOCK_SIZE - 1)) / BLOCK_SIZE);
 
-    // External shared breath MUST drive brightness (sync requirement). [1](https://teamtelstra-my.sharepoint.com/personal/jeff_c_cornwell_team_telstra_com/Documents/Microsoft%20Copilot%20Chat%20Files/LedStrip.cpp)[2](https://teamtelstra-my.sharepoint.com/personal/jeff_c_cornwell_team_telstra_com/Documents/Microsoft%20Copilot%20Chat%20Files/LedMatrix.cpp)
+    // External shared breath MUST drive brightness (sync requirement).
     const uint8_t pulse = (s_externalSpookyBreath != 0xFF) ? s_externalSpookyBreath : 90;
 
     const uint8_t SPOOKY_HUE_MIN = 70;
     const uint8_t SPOOKY_HUE_MAX = 120;
-
     const uint16_t NOISE_SCALE = 520;
 
     for (uint16_t v = 0; v < virtualCount; ++v) {
@@ -217,7 +220,7 @@ namespace LedStrip {
 
       uint8_t n1 = inoise8(x, z);
       uint8_t n2 = inoise8((uint16_t)(x >> 1), (uint16_t)(z + 137));
-      uint8_t n  = lerp8by8(n1, n2, 96);
+      uint8_t n = lerp8by8(n1, n2, 96);
       n = ease8InOutQuad(n);
 
       const uint8_t hue = (uint8_t)map(n, 0, 255, SPOOKY_HUE_MIN, SPOOKY_HUE_MAX);
@@ -235,37 +238,34 @@ namespace LedStrip {
   // ------------------------------------------------------------
   // Public API
   // ------------------------------------------------------------
-
   void begin() {
     FastLED.addLeds<WS2812B, DATA_PIN, COLOR_ORDER>(s_leds, NUM_LEDS);
     clear();
 
     // One-time show at boot so strip comes up in a known state.
-    // (Runtime updates remain owned by LedMatrix::update().) [1](https://teamtelstra-my.sharepoint.com/personal/jeff_c_cornwell_team_telstra_com/Documents/Microsoft%20Copilot%20Chat%20Files/LedStrip.cpp)[2](https://teamtelstra-my.sharepoint.com/personal/jeff_c_cornwell_team_telstra_com/Documents/Microsoft%20Copilot%20Chat%20Files/LedMatrix.cpp)
+    // (Runtime updates remain owned by LedMatrix::update().)
     FastLED.show();
 
-    s_lastFrameMs  = millis();
+    s_lastFrameMs = millis();
     s_isOffLatched = false;
-    s_lastFolder   = 255;
+    s_lastFolder = 255;
 
-    s_partyTime    = 0;
-
-    s_emberTime    = 0;
-    s_emberDriftX  = 0;
-
-    s_spookyTime   = 0;
+    s_partyTime = 0;
+    s_emberTime = 0;
+    s_emberDriftX = 0;
+    s_spookyTime = 0;
     s_externalSpookyBreath = 0xFF;
 
     DBG_LED_STRIP2(F("[STRIP] Ready: "), NUM_LEDS);
   }
 
   void update(uint8_t folder, bool lightsOn) {
-    // Off conditions: MATRIX_OFF (lightsOn=false) or folder==99 [1](https://teamtelstra-my.sharepoint.com/personal/jeff_c_cornwell_team_telstra_com/Documents/Microsoft%20Copilot%20Chat%20Files/LedStrip.cpp)
+    // Off conditions: MATRIX_OFF (lightsOn=false) or folder==99
     if (!lightsOn || folder == 99) {
       if (!s_isOffLatched) {
         clear();
         s_isOffLatched = true;
-        // No FastLED.show() here; LedMatrix::update() will push the cleared state. [1](https://teamtelstra-my.sharepoint.com/personal/jeff_c_cornwell_team_telstra_com/Documents/Microsoft%20Copilot%20Chat%20Files/LedStrip.cpp)[2](https://teamtelstra-my.sharepoint.com/personal/jeff_c_cornwell_team_telstra_com/Documents/Microsoft%20Copilot%20Chat%20Files/LedMatrix.cpp)
+        // No FastLED.show() here; LedMatrix::update() will push the cleared state.
       }
       s_lastFolder = folder;
       return;
@@ -280,7 +280,6 @@ namespace LedStrip {
     // Gentle deterministic resets on folder change
     if (folder != s_lastFolder) {
       s_lastFolder = folder;
-
       if (folder == 1) {
         s_partyTime = 0;
       } else if (folder == 2) {
@@ -296,14 +295,14 @@ namespace LedStrip {
 
     switch (folder) {
       case 1: renderPartyMarbleStrip_Block4(); break; // widened x4 + feathered
-      case 2: renderEmberMarbleSlow_Block4();  break; // slow, darker, blurrier ember coals
-      case 3: renderXmasHalfPulseStrip();      break; // unchanged
-      case 4: renderSpookyStrip_Block4();      break; // widened x4 + feathered (breath sync preserved)
+      case 2: renderEmberMarbleSlow_Block4(); break;  // slow, darker, blurrier ember coals
+      case 3: renderXmasHalfPulseStrip(); break;       // UPDATED: swap + split offset -2
+      case 4: renderSpookyStrip_Block4(); break;       // widened x4 + feathered (breath sync preserved)
       default: clear(); break;
     }
 
     // IMPORTANT: Do not call FastLED.show() here.
-    // LedMatrix::update() already calls FastLED.show() and will output both controllers. [1](https://teamtelstra-my.sharepoint.com/personal/jeff_c_cornwell_team_telstra_com/Documents/Microsoft%20Copilot%20Chat%20Files/LedStrip.cpp)[2](https://teamtelstra-my.sharepoint.com/personal/jeff_c_cornwell_team_telstra_com/Documents/Microsoft%20Copilot%20Chat%20Files/LedMatrix.cpp)
+    // LedMatrix::update() already calls FastLED.show() and will output both controllers.
   }
 
 } // namespace LedStrip

@@ -36,15 +36,15 @@ namespace {
   // Tuned thresholds (us)
   // ------------------------------------------------------------
   const uint32_t FOLDER4_LOWER_US = 0;
-  const uint32_t FOLDER4_UPPER_US = 42;
+  const uint32_t FOLDER4_UPPER_US = 40;
 
-  const uint32_t FOLDER3_LOWER_US = 48;
-  const uint32_t FOLDER3_UPPER_US = 62;
+  const uint32_t FOLDER3_LOWER_US = 44;
+  const uint32_t FOLDER3_UPPER_US = 48;
 
-  const uint32_t FOLDER2_LOWER_US = 78;
-  const uint32_t FOLDER2_UPPER_US = 124;
+  const uint32_t FOLDER2_LOWER_US = 58;
+  const uint32_t FOLDER2_UPPER_US = 72;
 
-  const uint32_t FOLDER1_LOWER_US = 156;
+  const uint32_t FOLDER1_LOWER_US = 88;
 
   // Stability requirements
   const uint8_t STABLE_COUNT_FOLDER = 4;

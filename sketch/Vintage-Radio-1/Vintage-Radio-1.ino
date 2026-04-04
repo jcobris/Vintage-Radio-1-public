@@ -25,7 +25,7 @@ static const uint8_t DIAL_SOLID_ALT    = 30;
 // When the matrix is switched OFF, WS2812 load disappears and the 5V rail can rise,
 // making the dial LED appear noticeably brighter at the same PWM level.
 // Provide a separate solid brightness for "matrix off" to compensate perceptually.
-static const uint8_t DIAL_SOLID_MATRIX_OFF_NORMAL = 40; // tune to taste
+static const uint8_t DIAL_SOLID_MATRIX_OFF_NORMAL = 30; // tune to taste
 static const uint8_t DIAL_SOLID_MATRIX_OFF_ALT    = 25; // tune to taste
 
 // Pulse behaviour (folder 4) - shared breath for matrix + dial
