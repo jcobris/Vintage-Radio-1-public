@@ -1,23 +1,19 @@
 
 // LedMatrix.cpp
 #include "LedMatrix.h"
+
 namespace LedMatrix {
+
   CRGB leds[NUM_LEDS];
+
   static uint32_t lastFrameMs = 0;
   static bool s_isOffLatched = false;
 
   // Folder 1
-  static uint32_t partyTime = 0;   // removed CRGBPalette16 copy to save SRAM
+  static uint32_t partyTime = 0;
 
   // Folder 4
-  static uint32_t spookyTime = 0;
-
-  // External breath support for folder 4 sync
-  // 0xFF = not set / use internal breathing
-  static uint8_t s_externalSpookyBreath = 0xFF;
-
-  // Internal fixed-point smoothed pulse for spooky breathing fallback:
-  // store 8.8 fixed point (upper 8 bits = integer 0..255, lower 8 bits = fraction)
+  static uint8_t  s_externalSpookyBreath = 0xFF;
   static uint16_t s_spookyPulseQ8_8 = 0;
 
   // Folder 2
@@ -38,23 +34,18 @@ namespace LedMatrix {
   static inline uint8_t mix8(uint8_t a, uint8_t b, uint8_t w) { return mixWeighted(a, b, w); }
 
   static inline uint16_t triwave16_local(uint16_t phase) {
-    if (phase < 32768) {
-      return (uint16_t)((uint32_t)phase * 2U);
-    } else {
-      return (uint16_t)((uint32_t)(65535U - phase) * 2U);
-    }
+    if (phase < 32768) return (uint16_t)((uint32_t)phase * 2U);
+    return (uint16_t)((uint32_t)(65535U - phase) * 2U);
   }
 
   void setSpookyBreath(uint8_t pulse) {
     s_externalSpookyBreath = pulse;
   }
+
 } // namespace LedMatrix
 
 using namespace LedMatrix;
 
-// ------------------------------------------------------------
-// Public API
-// ------------------------------------------------------------
 void LedMatrix::begin() {
   FastLED.addLeds<WS2812B, DATA_PIN, COLOR_ORDER>(leds, NUM_LEDS);
   clear();
@@ -62,13 +53,11 @@ void LedMatrix::begin() {
   lastFrameMs = millis();
   s_isOffLatched = false;
 }
+
 void LedMatrix::clear() {
   fill_solid(leds, NUM_LEDS, CRGB::Black);
 }
 
-// ------------------------------------------------------------
-// Renderers
-// ------------------------------------------------------------
 static void renderPartyMarble() {
   partyTime += LedMatrix::PARTY_TIME_NOISE_SPEED;
   const uint8_t swirlA = beatsin8(7, 0, 255);
@@ -79,10 +68,7 @@ static void renderPartyMarble() {
     uint16_t z = (uint16_t)(partyTime + (swirlA / 2) + (swirlB / 3));
     uint8_t n = inoise8((uint16_t)(x & 0xFFFF), z);
     uint8_t index = qadd8(n, 30);
-
-    // Use PartyColors_p directly (no SRAM palette copy).
     CRGB color = ColorFromPalette(PartyColors_p, index, 255);
-
     uint16_t base = blockBaseIndex(col);
     for (uint8_t i = 0; i < 8; ++i) leds[base + i] = color;
   }
@@ -128,9 +114,7 @@ static void renderFireColumns() {
   flickerTick++;
   const bool updateJitterNow = (flickerTick % FIRE_FLICKER_PERIOD) == 0;
   if (updateJitterNow) {
-    for (uint8_t col = 0; col < 32; ++col) {
-      flickerJitter[col] = random8(0, FIRE_FLICKER_VARIANCE);
-    }
+    for (uint8_t col = 0; col < 32; ++col) flickerJitter[col] = random8(0, FIRE_FLICKER_VARIANCE);
   }
 
   for (uint8_t col = 0; col < 32; ++col) {
@@ -165,9 +149,8 @@ static void renderXmasColumns() {
   }
 }
 
-static void renderSpookyColumns() {
-  spookyTime += SPOOKY_TIME_NOISE_SPEED;
-
+// Folder 4 solid fog
+static void renderSpookySolid() {
   uint8_t pulse = 0;
   if (s_externalSpookyBreath != 0xFF) {
     pulse = s_externalSpookyBreath;
@@ -188,39 +171,31 @@ static void renderSpookyColumns() {
     pulse = (uint8_t)(s_spookyPulseQ8_8 >> 8);
   }
 
-  const uint8_t EDGE_W = 2;
-  uint8_t edgeV = scale8(pulse, 208);
-  if (edgeV < 45) edgeV = 45;
-  const CRGB edgePurple = CHSV(205, 255, edgeV);
+  // Matrix-only brightness boost (Folder 4 only)
+  const uint8_t pulseMatrix = qadd8(pulse, 12);
 
-  const uint8_t SPOOKY_HUE_MIN = 60;
-  const uint8_t SPOOKY_HUE_MAX = 124;
+  const uint8_t EDGE_W = 3;
+
+  // Fog: more lime (was 116, now 110)
+  const CHSV fogHSV(100, 220, 255);
+  CRGB fog = fogHSV;
+  fog.nscale8_video(pulseMatrix);
+
+  const CHSV edgeHSV(205, 255, 255);
+  CRGB edge = edgeHSV;
+
+  const uint8_t edgeLevel = qadd8(40, scale8(pulseMatrix, 215));
+  edge.nscale8_video(edgeLevel);
 
   for (uint16_t col = 0; col < 32; ++col) {
-    const uint16_t x = (uint16_t)((uint32_t)col * SPOOKY_COLUMN_NOISE_SCALE);
-    const uint16_t z = (uint16_t)spookyTime;
-
-    uint8_t n1 = inoise8(x, z);
-    uint8_t n2 = inoise8((uint16_t)(x >> 1), (uint16_t)(z + 137));
-    uint8_t n = lerp8by8(n1, n2, 96);
-    n = ease8InOutQuad(n);
-
-    uint8_t hue = (uint8_t)map(n, 0, 255, SPOOKY_HUE_MIN, SPOOKY_HUE_MAX);
-    uint8_t sat = (uint8_t)map(n2, 0, 255, 180, 255);
-    CRGB color = CHSV(hue, sat, pulse);
-
-    if (col < EDGE_W || col >= (32 - EDGE_W)) {
-      color = edgePurple;
-    }
+    CRGB color = fog;
+    if (col < EDGE_W || col >= (32 - EDGE_W)) color = edge;
 
     uint16_t base = blockBaseIndex(col);
     for (uint8_t i = 0; i < 8; ++i) leds[base + i] = color;
   }
 }
 
-// ------------------------------------------------------------
-// Update dispatcher
-// ------------------------------------------------------------
 void LedMatrix::update(uint8_t folder, bool lightsOn) {
   const uint32_t now = millis();
 
@@ -245,7 +220,7 @@ void LedMatrix::update(uint8_t folder, bool lightsOn) {
       for (uint8_t i = 0; i < FIRE_SPEED_SCALE; ++i) renderFireColumns();
       break;
     case 3: renderXmasColumns(); break;
-    case 4: renderSpookyColumns(); break;
+    case 4: renderSpookySolid(); break;
     default:
       clear();
       FastLED.show();

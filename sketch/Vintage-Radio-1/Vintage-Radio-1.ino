@@ -29,11 +29,16 @@ static const uint8_t DIAL_SOLID_MATRIX_OFF_NORMAL = 30; // tune to taste
 static const uint8_t DIAL_SOLID_MATRIX_OFF_ALT    = 25; // tune to taste
 
 // Pulse behaviour (folder 4) - shared breath for matrix + dial
-static const uint8_t DIAL_PULSE_MIN_NORMAL = 30;
-static const uint8_t DIAL_PULSE_MAX_NORMAL = 40;
-static const uint8_t DIAL_PULSE_MIN_ALT    = 10;
-static const uint8_t DIAL_PULSE_MAX_ALT    = 30;
-static const uint8_t DIAL_PULSE_BPM        = 12;
+// (These drive matrix/strip. Dial can have an additional floor clamp below.)
+static const uint8_t DIAL_PULSE_MIN_NORMAL = 8;
+static const uint8_t DIAL_PULSE_MAX_NORMAL = 55;
+static const uint8_t DIAL_PULSE_MIN_ALT    = 6;
+static const uint8_t DIAL_PULSE_MAX_ALT    = 40;
+static const uint8_t DIAL_PULSE_BPM        = 9;   // slowed earlier
+
+// NEW: Dial-only floor clamp for Folder 4 (does not affect matrix/strip)
+static const uint8_t DIAL_F4_MIN_FLOOR_NORMAL = 32; // raise if dial still dips too low
+static const uint8_t DIAL_F4_MIN_FLOOR_ALT    = 32; // raise if dial still dips too low
 
 // Flicker behaviour (between stations)
 static const uint8_t  DIAL_FLICKER_MIN_NORMAL = 30;
@@ -80,6 +85,9 @@ static uint8_t  g_nextBtnRaw = HIGH;
 static uint8_t  g_nextBtnStable = HIGH;
 static uint32_t g_nextBtnLastChangeMs = 0;
 
+// Folder 4 breath smoothing (Q8.8 fixed point)
+static uint16_t g_spookyBreathQ8_8 = 0;
+
 // ============================================================
 // Helpers
 // ============================================================
@@ -94,22 +102,27 @@ static SourceMode readSourceMode() {
 }
 
 static uint8_t sanitizeFolder(uint8_t f) {
-  // 1..4 = valid
   if (f >= 1 && f <= 4) return f;
-
-  // 99 = gap
   if (f == 99) return 99;
-
-  // 255 = fault (treat as gap)
-  // anything else also treated as gap
   return 99;
+}
+
+static inline void resetSpookyBreathSmoother() {
+  g_spookyBreathQ8_8 = 0;
+}
+
+static inline uint8_t smoothSpookyBreath(uint8_t target) {
+  const uint16_t targetQ = (uint16_t)target << 8;
+  if (g_spookyBreathQ8_8 == 0) g_spookyBreathQ8_8 = targetQ;
+  const int16_t diff = (int16_t)(targetQ - g_spookyBreathQ8_8);
+  g_spookyBreathQ8_8 = (uint16_t)(g_spookyBreathQ8_8 + (diff >> 2));
+  return (uint8_t)(g_spookyBreathQ8_8 >> 8);
 }
 
 // ============================================================
 // Setup
 // ============================================================
 void setup() {
-  // Serial debug must be set only once, here:
   Serial.begin(115200);
   delay(200);
 
@@ -123,12 +136,9 @@ void setup() {
   g_nextBtnStable = g_nextBtnRaw;
   g_nextBtnLastChangeMs = millis();
 
-  // FastLED controllers:
   LedMatrix::begin();
   LedStrip::begin();
 
-  // NEW: Limit WS2812 power draw to reduce 5V sag that can dim the dial LED under load.
-  // This scales LED output only when required to stay under the budget.
   FastLED.setMaxPowerInVoltsAndMilliamps(5, 1200);
 
   DisplayLED::begin(Config::PIN_LED_DISPLAY);
@@ -139,7 +149,6 @@ void setup() {
 
   MP3::init();
 
-  // Initial matrix brightness (single source of truth is this sketch)
   FastLED.setBrightness(MATRIX_BRIGHT_NORMAL);
 
   DBG_BOOT(F("[BOOT] System ready"));
@@ -151,9 +160,6 @@ void setup() {
 void loop() {
   const uint32_t now = millis();
 
-  // ----------------------------------------------------------
-  // Display mode
-  // ----------------------------------------------------------
   g_displayMode = readDisplayMode();
   if (g_displayMode != g_lastDisplayMode) {
     g_lastDisplayMode = g_displayMode;
@@ -178,9 +184,6 @@ void loop() {
   const bool altMode  = (g_displayMode == DISPLAY_ALT);
   const bool lightsOn = (g_displayMode != DISPLAY_OFF);
 
-  // ----------------------------------------------------------
-  // Source mode
-  // ----------------------------------------------------------
   g_sourceMode = readSourceMode();
   if (g_sourceMode != g_lastSourceMode) {
     g_lastSourceMode = g_sourceMode;
@@ -194,10 +197,6 @@ void loop() {
     }
   }
 
-  // ----------------------------------------------------------
-  // Next-track button (D13, active-low) - debounced, edge-triggered
-  // Only active when MP3 source is selected.
-  // ----------------------------------------------------------
   const uint8_t btn = digitalRead(Config::PIN_NEXT_TRACK_BUTTON);
 
   if (btn != g_nextBtnRaw) {
@@ -218,74 +217,64 @@ void loop() {
     }
   }
 
-  // ----------------------------------------------------------
-  // Folder selection (isolate RC timing from FastLED.show)
-  // ----------------------------------------------------------
   bool didTunePollThisLoop = false;
 
   if (g_sourceMode == SOURCE_MP3) {
     if (now - g_lastTunePollMs >= TUNE_POLL_MS) {
       g_lastTunePollMs = now;
       didTunePollThisLoop = true;
-
-      // Perform RC measurement + commit logic
       g_folder = sanitizeFolder(RadioTuning::getFolder(Config::PIN_TUNING_INPUT));
     }
   } else {
     g_folder = 1;
   }
 
-  // ----------------------------------------------------------
-  // MP3 control
-  // ----------------------------------------------------------
   if (g_sourceMode == SOURCE_MP3) {
     MP3::setDesiredFolder(g_folder);
     MP3::tick();
   }
 
-  // ----------------------------------------------------------
-  // Dial LED + Matrix Folder 4 shared breathing (dimmed in ALT)
-  // ----------------------------------------------------------
   if (!lightsOn) {
-    // Matrix off: dial forced solid ON (use dedicated brightness to compensate
-    // for higher apparent brightness when WS2812 load is removed)
     DisplayLED::setSolid(altMode ? DIAL_SOLID_MATRIX_OFF_ALT : DIAL_SOLID_MATRIX_OFF_NORMAL);
-    LedMatrix::setSpookyBreath(0xFF); // release override
-    LedStrip::setSpookyBreath(0xFF);  // release override (NEW)
+    LedMatrix::setSpookyBreath(0xFF);
+    LedStrip::setSpookyBreath(0xFF);
+    resetSpookyBreathSmoother();
   } else if (g_folder == 99) {
     DisplayLED::flickerRandomTick(
       altMode ? DIAL_FLICKER_MIN_ALT : DIAL_FLICKER_MIN_NORMAL,
       altMode ? DIAL_FLICKER_MAX_ALT : DIAL_FLICKER_MAX_NORMAL,
       DIAL_FLICKER_TICK_MS
     );
-    LedMatrix::setSpookyBreath(0xFF); // release override
-    LedStrip::setSpookyBreath(0xFF);  // release override (NEW)
+    LedMatrix::setSpookyBreath(0xFF);
+    LedStrip::setSpookyBreath(0xFF);
+    resetSpookyBreathSmoother();
   } else if (g_folder == 4) {
-    // One shared breath value: matrix + dial (and now strip) are perfectly in sync
-    const uint8_t sharedBreath = beatsin8(
+    const uint8_t rawBreath = beatsin8(
       DIAL_PULSE_BPM,
       altMode ? DIAL_PULSE_MIN_ALT : DIAL_PULSE_MIN_NORMAL,
       altMode ? DIAL_PULSE_MAX_ALT : DIAL_PULSE_MAX_NORMAL
     );
 
-    DisplayLED::setSolid(sharedBreath);
+    const uint8_t sharedBreath = smoothSpookyBreath(rawBreath);
+
+    // Dial-only clamp (matrix/strip keep the exact sharedBreath low that you like)
+    uint8_t dialBreath = sharedBreath;
+    const uint8_t floorVal = altMode ? DIAL_F4_MIN_FLOOR_ALT : DIAL_F4_MIN_FLOOR_NORMAL;
+    if (dialBreath < floorVal) dialBreath = floorVal;
+
+    DisplayLED::setSolid(dialBreath);
     LedMatrix::setSpookyBreath(sharedBreath);
-    LedStrip::setSpookyBreath(sharedBreath); // NEW: strip uses exact same shared value
+    LedStrip::setSpookyBreath(sharedBreath);
   } else {
     DisplayLED::setSolid(altMode ? DIAL_SOLID_ALT : DIAL_SOLID_NORMAL);
-    LedMatrix::setSpookyBreath(0xFF); // release override
-    LedStrip::setSpookyBreath(0xFF);  // release override (NEW)
+    LedMatrix::setSpookyBreath(0xFF);
+    LedStrip::setSpookyBreath(0xFF);
+    resetSpookyBreathSmoother();
   }
 
-  // ----------------------------------------------------------
-  // LEDs: skip LED updates on the RC-measurement iteration
-  // Prevent FastLED.show() (inside LedMatrix::update) overlapping RC timing.
-  // ----------------------------------------------------------
+  // Skip LED updates on RC-measurement iteration (RC timing protection)
   if (!didTunePollThisLoop) {
-    // Strip update first (no FastLED.show() here)
     LedStrip::update(g_folder, lightsOn);
-
-    // Matrix update (calls FastLED.show())
     LedMatrix::update(g_folder, lightsOn);
   }
 }
